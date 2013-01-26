@@ -22,8 +22,12 @@ TEMPLATE = app
 
 
 SOURCES += main.cpp\
-        sis.cpp
+        sis.cpp \
+    qmessageedit.cpp \
+    qtabswidget.cpp
 
-HEADERS  += sis.h
+HEADERS  += sis.h \
+    qmessageedit.h \
+    qtabswidget.h
 
 QMAKE_CXXFLAGS += -std=c++11

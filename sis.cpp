@@ -22,6 +22,7 @@ SIS::SIS(QWidget *parent)
     tabBar = window->tabBar();
     connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(clearColor(int)));
 
+
     // Initializing
     init = QCA::Initializer();
 
@@ -128,11 +129,11 @@ void SIS::transfer()
       return;
     }
 
-    QLineEdit *edit = qobject_cast<QLineEdit*>(sender());
+    QMessageEdit *edit = qobject_cast<QMessageEdit*>(sender());
     if(edit == 0)
         return;
 
-    if(edit->text().size() == 0)
+    if(edit->toPlainText().size() == 0)
         return;
 
     QTcpSocket* socket = edit_socket[edit];
@@ -143,7 +144,8 @@ void SIS::transfer()
     //Encoding with the original key
     QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, key, iv);
 
-    QCA::SecureArray secureData = edit->text().toUtf8();
+    QString currText = edit->toPlainText().replace("\n", "<br />");
+    QCA::SecureArray secureData = currText.toUtf8();
     QCA::SecureArray encryptedData = cipher.process(secureData);
     if(!cipher.ok())
     {
@@ -165,8 +167,7 @@ void SIS::transfer()
 
 
     QTime time = QDateTime::currentDateTime().time();
-
-    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'> <b>Me:\t\t</b></span>" + Qt::escape(edit->text()));
+    browser->append("<span style='color:#204a87;min-width:6em;' title='" + time.toString() + "'><b>Me: </b></span>" + Qt::escape(currText).replace("&lt;br /&gt;", "<br />"));  // @TODO change 6 (em) to the size of the largest nickname
     edit->clear();
 }
 
@@ -315,7 +316,16 @@ void SIS::dataReceived()
     else if(type == text)
     {
         if(window->currentIndex() != tabId)
+        {
+            QVariant v = tabBar->tabData(tabId);
+            QFont font;
+            font.setItalic(true);
+            font.setFamily("Arial");
+            font.setBold(true);
+            v.setValue(font);
+            tabBar->setTabData(tabId, v);
             tabBar->setTabTextColor(tabId, Qt::blue);
+        }
 
         if (!QCA::isSupported("blowfish-cbc"))
         {
@@ -337,8 +347,8 @@ void SIS::dataReceived()
 
         QTime time = QDateTime::currentDateTime().time();
 
-        browser->append("<span style='color:#cc0000' title='" + time.toString() + "'> <b>Other:\t</b></span>" + Qt::escape(QString::fromUtf8(decryptedData.data())));
-        socket_edit[socket]->setFocus();
+        browser->append("<span style='color:#cc0000;min-width:6em;' title='" + time.toString() + "'><b>Other: </b></span>" + Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />"));
+        //socket_edit[socket]->setFocus();
     }
 }
 
@@ -394,9 +404,13 @@ void SIS::clearColor(int tabId)
 void SIS::openTab(QTcpSocket *socket)
 {
     QTextBrowser* browser = new QTextBrowser;
-    QLineEdit* edit = new QLineEdit;
+    QMessageEdit* edit = new QMessageEdit(window);
+
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
+    connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
+    edit->setFixedHeight(42);
     QVBoxLayout* lay = new QVBoxLayout;
+
     lay->addWidget(browser);
     lay->addWidget(edit);
     QWidget* cont = new QWidget;
@@ -409,7 +423,7 @@ void SIS::openTab(QTcpSocket *socket)
     }
     if(!window->isVisible())
     {
-
+        window->show();
     }
 
     int tabId = window->addTab(cont, "Socket " + QString::number(socket->socketDescriptor()));
@@ -421,6 +435,7 @@ void SIS::openTab(QTcpSocket *socket)
     datas current;
     current.browser = browser;
     current.tabId = tabId;
+    current.container = cont;
 
     networkMap.insert({socket, current});
     tabMap.insert({tabId, {edit, socket}});
