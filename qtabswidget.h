@@ -14,6 +14,7 @@ public:
     QTabBar* tabBar() const { return QTabWidget::tabBar(); }
 public slots:
     void nextTab();
+    void previousTab();
 };
 
 

@@ -22,7 +22,6 @@ SIS::SIS(QWidget *parent)
     tabBar = window->tabBar();
     connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(clearColor(int)));
 
-
     // Initializing
     init = QCA::Initializer();
 
@@ -30,6 +29,31 @@ SIS::SIS(QWidget *parent)
     if(!QCA::isSupported("pkey"))
     {
         state->setText("pkey not supported");
+        QString info;
+        QCA::scanForPlugins();
+
+        // this gives us all the plugin providers as a list
+        QCA::ProviderList qcaProviders = QCA::providers();
+        for ( int i = 0; i < qcaProviders.size(); ++i )
+        {
+            // each provider has a name, which we can display
+            info += qcaProviders[i]->name() + ": ";
+            // ... and also a list of features
+            QStringList capabilities = qcaProviders[i]->features();
+            // we turn the string list back into a single string,
+            // and display it as well
+            info += capabilities.join(", ") + "\n";
+        }
+
+        // Note that the default provider isn't included in
+        // the result of QCA::providers()
+        info += "default: ";
+        // However it is still possible to get the features
+        // supported by the default provider
+        QStringList capabilities = QCA::defaultFeatures();
+        info += capabilities.join(", ") + "\n";
+        state->append(info);
+
         return;
     }
     if(!QCA::PKey::supportedIOTypes().contains(QCA::PKey::RSA))
@@ -117,6 +141,30 @@ SIS::SIS(QWidget *parent)
 
     state->setText(QString::number(timer->elapsed()) + " ms to launch program");
     button->setEnabled(true);
+    QString info;
+    QCA::scanForPlugins();
+
+    // this gives us all the plugin providers as a list
+    QCA::ProviderList qcaProviders = QCA::providers();
+    for ( int i = 0; i < qcaProviders.size(); ++i )
+    {
+        // each provider has a name, which we can display
+        info += qcaProviders[i]->name() + ": ";
+        // ... and also a list of features
+        QStringList capabilities = qcaProviders[i]->features();
+        // we turn the string list back into a single string,
+        // and display it as well
+        info += capabilities.join(", ") + "\n";
+    }
+
+    // Note that the default provider isn't included in
+    // the result of QCA::providers()
+    info += "default: ";
+    // However it is still possible to get the features
+    // supported by the default provider
+    QStringList capabilities = QCA::defaultFeatures();
+    info += capabilities.join(", ") + "\n";
+    state->append(info);
 }
 
 void SIS::transfer()
@@ -167,13 +215,12 @@ void SIS::transfer()
 
 
     QTime time = QDateTime::currentDateTime().time();
-    browser->append("<span style='color:#204a87;min-width:6em;' title='" + time.toString() + "'><b>Me: </b></span>" + Qt::escape(currText).replace("&lt;br /&gt;", "<br />"));  // @TODO change 6 (em) to the size of the largest nickname
+    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>Me: </b></span>" + Qt::escape(currText).replace("&lt;br /&gt;", "<br />"));
     edit->clear();
 }
 
 void SIS::newConversation()
 {
-    qDebug() << "New conversation";
     QTcpSocket* socket = server->nextPendingConnection();
 
     connect(socket, SIGNAL(readyRead()), this, SLOT(dataReceived()));
@@ -347,7 +394,7 @@ void SIS::dataReceived()
 
         QTime time = QDateTime::currentDateTime().time();
 
-        browser->append("<span style='color:#cc0000;min-width:6em;' title='" + time.toString() + "'><b>Other: </b></span>" + Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />"));
+        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>Other: </b></span>" + Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />"));
         //socket_edit[socket]->setFocus();
     }
 }
@@ -405,12 +452,12 @@ void SIS::openTab(QTcpSocket *socket)
 {
     QTextBrowser* browser = new QTextBrowser;
     QMessageEdit* edit = new QMessageEdit(window);
-
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
     connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
+    connect(edit, SIGNAL(previousTab()), window, SLOT(previousTab()));
     edit->setFixedHeight(42);
-    QVBoxLayout* lay = new QVBoxLayout;
 
+    QVBoxLayout* lay = new QVBoxLayout;
     lay->addWidget(browser);
     lay->addWidget(edit);
     QWidget* cont = new QWidget;

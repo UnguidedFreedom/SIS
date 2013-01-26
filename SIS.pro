@@ -8,14 +8,16 @@ QT       += core gui network
 
 win32 {
     LIBS += -lqca2
-    LIBS += -lqca-ossl2
+    LIBS += -L$quote(C:\Users\Vernier\qca-ossl-2.0.0-beta3\lib) -lqca-ossl2
+    QMAKE_CXXFLAGS += -std=c++0x
 }
 unix {
     LIBS += -lqca
     LIBS += -lssl
+    QMAKE_CXXFLAGS += -std=c++11
 }
 
-CONFIG += crypto
+CONFIG *= crypto
 
 TARGET = SIS
 TEMPLATE = app
@@ -29,5 +31,3 @@ SOURCES += main.cpp\
 HEADERS  += sis.h \
     qmessageedit.h \
     qtabswidget.h
-
-QMAKE_CXXFLAGS += -std=c++11

@@ -17,9 +17,14 @@ void QMessageEdit::keyPressEvent(QKeyEvent *e)
             return;
         }
     }
-    if(e == QKeySequence::NextChild)
+    else if(e == QKeySequence::NextChild)
     {
         emit nextTab();
+        return;
+    }
+    else if(e == QKeySequence::PreviousChild)
+    {
+        emit previousTab();
         return;
     }
     QTextEdit::keyPressEvent(e);

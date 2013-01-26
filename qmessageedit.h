@@ -17,7 +17,7 @@ protected:
 signals:
     void returnPressed();
     void nextTab();
-    
+    void previousTab();
 };
 
 #endif // QMESSAGEEDIT_H
