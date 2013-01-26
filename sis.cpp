@@ -166,7 +166,7 @@ void SIS::transfer()
 
     QTime time = QDateTime::currentDateTime().time();
 
-    browser->append("<span style='color:#204a87;'>(" + time.toString() + ") <b>Me:\t\t</b></span>" + edit->text());
+    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'> <b>Me:\t\t</b></span>" + edit->text());
     edit->clear();
 }
 
@@ -337,7 +337,7 @@ void SIS::dataReceived()
 
         QTime time = QDateTime::currentDateTime().time();
 
-        browser->append("<span style='color:#cc0000'>(" + time.toString() + ") <b>Other:\t</b></span>" + QString::fromUtf8(decryptedData.data()));
+        browser->append("<span style='color:#cc0000' title='" + time.toString() + "'> <b>Other:\t</b></span>" + QString::fromUtf8(decryptedData.data()));
         socket_edit[socket]->setFocus();
     }
 }
