@@ -216,7 +216,9 @@ void SIS::transfer()
 
 
     QTime time = QDateTime::currentDateTime().time();
-    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>Me: </b></span>" + Qt::escape(currText).replace("&lt;br /&gt;", "<br />"));
+    QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
+    t.replace(QRegExp("(https?:\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+]+)"), "<a href='\\1'>\\1</a>");
+    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>Me: </b></span>" + t);
     edit->clear();
 }
 
@@ -397,8 +399,9 @@ void SIS::dataReceived()
 
         QTime time = QDateTime::currentDateTime().time();
 
-        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>Other: </b></span>" + Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />"));
-        //socket_edit[socket]->setFocus();
+        QString t = Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
+        t.replace(QRegExp("(https?:\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+]+)"), "<a href='\\1'>\\1</a>");
+        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>Other: </b></span>" + t);
     }
 }
 
@@ -454,6 +457,7 @@ void SIS::clearColor(int tabId)
 void SIS::openTab(QTcpSocket *socket)
 {
     QMessagesBrowser* browser = new QMessagesBrowser;
+    browser->setOpenExternalLinks(true);
     QMessageEdit* edit = new QMessageEdit(window);
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
     connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
