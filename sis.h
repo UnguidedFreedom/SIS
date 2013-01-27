@@ -6,6 +6,7 @@
 #include <QtCrypto/qca.h>
 #include <unordered_map>
 #include "qmessageedit.h"
+#include "qmessagesbrowser.h"
 
 using namespace std;
 
@@ -21,7 +22,7 @@ using namespace std;
 struct datas {
     int tabId;
     QWidget* container;
-    QTextBrowser* browser;
+    QMessagesBrowser* browser;
     QCA::SymmetricKey key;
     QCA::PublicKey pubKey;
 };
@@ -39,7 +40,7 @@ public:
   SIS(QWidget *parent = 0);
 
 private:
-  QTextBrowser* state;
+  QMessagesBrowser* state;
   QPushButton* button;
 
   QTabsWidget* window;

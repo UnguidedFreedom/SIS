@@ -3,7 +3,7 @@
 SIS::SIS(QWidget *parent)
   : QMainWindow(parent)
 {
-    state = new QTextBrowser;
+    state = new QMessagesBrowser;
 
     button = new QPushButton("Connect to host");
     connect(button, SIGNAL(pressed()), this, SLOT(requestNewConnection()));
@@ -20,6 +20,7 @@ SIS::SIS(QWidget *parent)
     window = new QTabsWidget;
   //  window->setTabsClosable(true);
     tabBar = window->tabBar();
+
     connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(clearColor(int)));
 
     // Initializing
@@ -186,7 +187,7 @@ void SIS::transfer()
 
     QTcpSocket* socket = edit_socket[edit];
     datas pairs = networkMap[socket];
-    QTextBrowser* browser = pairs.browser;
+    QMessagesBrowser* browser = pairs.browser;
     QCA::SymmetricKey key = pairs.key;
 
     //Encoding with the original key
@@ -259,7 +260,7 @@ void SIS::dataReceived()
     datas pairs = networkMap[socket];
 
     int tabId = pairs.tabId;
-    QTextBrowser* browser = pairs.browser;
+    QMessagesBrowser* browser = pairs.browser;
 
     messageSize = 0;
 
@@ -369,9 +370,11 @@ void SIS::dataReceived()
             font.setItalic(true);
             font.setFamily("Arial");
             font.setBold(true);
-            v.setValue(font);
-            tabBar->setTabData(tabId, v);
+           // v.setValue(font);
+        //    v.setValue(Qt::green);
             tabBar->setTabTextColor(tabId, Qt::blue);
+            tabBar->setTabData(tabId, QVariant::fromValue(font));
+         //   tabBar->initStyleOption(NULL, tabId);
         }
 
         if (!QCA::isSupported("blowfish-cbc"))
@@ -450,12 +453,16 @@ void SIS::clearColor(int tabId)
 
 void SIS::openTab(QTcpSocket *socket)
 {
-    QTextBrowser* browser = new QTextBrowser;
+    QMessagesBrowser* browser = new QMessagesBrowser;
     QMessageEdit* edit = new QMessageEdit(window);
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
     connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
     connect(edit, SIGNAL(previousTab()), window, SLOT(previousTab()));
     edit->setFixedHeight(42);
+
+
+    connect(browser, SIGNAL(giveFocus(QString)), edit, SLOT(setFocus()));
+    connect(browser, SIGNAL(giveFocus(QString)), edit, SLOT(insertPlainText(QString)));
 
     QVBoxLayout* lay = new QVBoxLayout;
     lay->addWidget(browser);
