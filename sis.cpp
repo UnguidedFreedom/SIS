@@ -138,7 +138,6 @@ SIS::SIS(QWidget *parent)
     }
 
     connect(server, SIGNAL(newConnection()), this, SLOT(newConversation()));
-    messageSize = 0;
 
     state->setText(QString::number(timer->elapsed()) + " ms to launch program");
     button->setEnabled(true);
@@ -238,19 +237,19 @@ void SIS::dataReceived()
     if(socket == 0)
         return;
 
-   // qDebug() << socket->socketDescriptor();
+    datas pairs = networkMap[socket];
 
     QDataStream in(socket);
 
-    if (messageSize == 0)
+    if (pairs.messageSize == 0)
     {
         if (socket->bytesAvailable() < (int)sizeof(quint16)) // messageSize not entierly received
              return;
 
-        in >> messageSize; // messageSize received
+        in >> pairs.messageSize; // messageSize received
     }
 
-    if(socket->bytesAvailable() < messageSize)
+    if(socket->bytesAvailable() < pairs.messageSize)
         return;
 
     int type;
@@ -259,12 +258,10 @@ void SIS::dataReceived()
     QByteArray data;
     in >> data;
 
-    datas pairs = networkMap[socket];
-
     int tabId = pairs.tabId;
     QMessagesBrowser* browser = pairs.browser;
 
-    messageSize = 0;
+    pairs.messageSize = 0;
 
     if(type == givePubK)
     {
@@ -494,6 +491,7 @@ void SIS::openTab(QTcpSocket *socket)
     current.browser = browser;
     current.tabId = tabId;
     current.container = cont;
+    current.messageSize = 0;
 
     networkMap.insert({socket, current});
     tabMap.insert({tabId, {edit, socket}});

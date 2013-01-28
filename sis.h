@@ -25,6 +25,7 @@ struct datas {
     QMessagesBrowser* browser;
     QCA::SymmetricKey key;
     QCA::PublicKey pubKey;
+    quint16 messageSize;
 };
 
 class SIS : public QMainWindow
