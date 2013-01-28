@@ -53,15 +53,15 @@ private:
   QCA::PublicKey publicKey;
 
   QTcpServer* server;
-  quint16 messageSize;
 
   unordered_map<QMessageEdit*, QTcpSocket*> edit_socket;
   unordered_map<QTcpSocket*, QMessageEdit*> socket_edit;
 
   unordered_map<QTcpSocket*, datas> networkMap; // int = tabIndex
-  unordered_map<int, pair<QMessageEdit*, QTcpSocket*> > tabMap;
+  map<int, pair<QMessageEdit*, QTcpSocket*> > tabMap;
 
   void openTab(QTcpSocket* socket);
+  void reOpenTab(QTcpSocket* socket);
 private slots:
   void transfer();
   void newConversation();
@@ -70,6 +70,7 @@ private slots:
   void connected();
   void disconnected();
   void clearColor(int);
+  void closeTab(int);
 };
 
 #endif // SIS_H

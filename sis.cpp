@@ -18,7 +18,8 @@ SIS::SIS(QWidget *parent)
     setWindowTitle("SIS Messaging");
 
     window = new QTabsWidget;
-  //  window->setTabsClosable(true);
+    window->setTabsClosable(true);
+    connect(window, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
     tabBar = window->tabBar();
 
     connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(clearColor(int)));
@@ -362,19 +363,13 @@ void SIS::dataReceived()
     }
     else if(type == text)
     {
-        if(window->currentIndex() != tabId)
+        if(tabId == -1)
         {
-            QVariant v = tabBar->tabData(tabId);
-            QFont font;
-            font.setItalic(true);
-            font.setFamily("Arial");
-            font.setBold(true);
-           // v.setValue(font);
-        //    v.setValue(Qt::green);
-            tabBar->setTabTextColor(tabId, Qt::blue);
-            tabBar->setTabData(tabId, QVariant::fromValue(font));
-         //   tabBar->initStyleOption(NULL, tabId);
+            reOpenTab(socket);
+            tabId = networkMap[socket].tabId;
         }
+        if(window->currentIndex() != tabId)
+            tabBar->setTabTextColor(tabId, Qt::blue);
 
         if (!QCA::isSupported("blowfish-cbc"))
         {
@@ -451,6 +446,30 @@ void SIS::clearColor(int tabId)
     tabBar->setTabTextColor(tabId, Qt::black);
 }
 
+void SIS::closeTab(int tab)
+{
+    window->removeTab(tab);
+    networkMap[tabMap[tab].second].tabId = -1;
+    for(unordered_map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
+    {
+        if(it->second.tabId > tab)
+            it->second.tabId--;
+    }
+
+    tabMap.erase(tab);
+
+    for(map<int, pair<QMessageEdit*, QTcpSocket*> >::iterator it = tabMap.begin(); it!= tabMap.end(); it++)
+    {
+        if(it->first > tab)
+        {
+            int currTabId = it->first;
+            pair<QMessageEdit*, QTcpSocket*> current = it->second;
+            tabMap.erase(currTabId);
+            tabMap.insert({currTabId-1, current});
+        }
+    }
+}
+
 void SIS::openTab(QTcpSocket *socket)
 {
     QMessagesBrowser* browser = new QMessagesBrowser;
@@ -497,4 +516,12 @@ void SIS::openTab(QTcpSocket *socket)
     tabMap.insert({tabId, {edit, socket}});
 
     edit->setFocus();
+}
+
+void SIS::reOpenTab(QTcpSocket *socket)
+{
+    datas data = networkMap[socket];
+    int tabId = window->addTab(data.container, "Socket " + QString::number(socket->socketDescriptor()));
+    networkMap[socket].tabId = tabId;
+    tabMap.insert({tabId, {socket_edit[socket], socket}});
 }
