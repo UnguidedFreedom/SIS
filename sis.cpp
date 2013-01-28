@@ -217,7 +217,7 @@ void SIS::transfer()
 
     QTime time = QDateTime::currentDateTime().time();
     QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
-    t.replace(QRegExp("(https?:\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+]+)"), "<a href='\\1'>\\1</a>");
+    t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
     browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>Me: </b></span>" + t);
     edit->clear();
 }
@@ -400,7 +400,7 @@ void SIS::dataReceived()
         QTime time = QDateTime::currentDateTime().time();
 
         QString t = Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
-        t.replace(QRegExp("(https?:\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+]+)"), "<a href='\\1'>\\1</a>");
+        t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
         browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>Other: </b></span>" + t);
     }
 }
