@@ -11,7 +11,7 @@ public:
     explicit QMessagesBrowser(QWidget *parent = 0);
     
 signals:
-    void giveFocus(QString);
+    void giveFocus(QKeyEvent*);
 protected:
     virtual void keyPressEvent(QKeyEvent *ev);
 };

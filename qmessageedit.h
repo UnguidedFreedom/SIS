@@ -14,6 +14,9 @@ public:
 protected:
     virtual void keyPressEvent(QKeyEvent *e);
 
+public slots:
+    void acceptKey(QKeyEvent *e);
+
 signals:
     void returnPressed();
     void nextTab();

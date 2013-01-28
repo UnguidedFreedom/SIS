@@ -29,3 +29,8 @@ void QMessageEdit::keyPressEvent(QKeyEvent *e)
     }
     QTextEdit::keyPressEvent(e);
 }
+
+void QMessageEdit::acceptKey(QKeyEvent *e)
+{
+    keyPressEvent(e);
+}

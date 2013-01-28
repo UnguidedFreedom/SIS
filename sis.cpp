@@ -459,14 +459,14 @@ void SIS::openTab(QTcpSocket *socket)
     QMessagesBrowser* browser = new QMessagesBrowser;
     browser->setOpenExternalLinks(true);
     QMessageEdit* edit = new QMessageEdit(window);
+    edit->setFocusPolicy(Qt::StrongFocus);
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
     connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
     connect(edit, SIGNAL(previousTab()), window, SLOT(previousTab()));
     edit->setFixedHeight(42);
 
-
-    connect(browser, SIGNAL(giveFocus(QString)), edit, SLOT(setFocus()));
-    connect(browser, SIGNAL(giveFocus(QString)), edit, SLOT(insertPlainText(QString)));
+    connect(browser, SIGNAL(giveFocus(QKeyEvent*)), edit, SLOT(setFocus()));
+    connect(browser, SIGNAL(giveFocus(QKeyEvent*)), edit, SLOT(acceptKey(QKeyEvent*)));
 
     QVBoxLayout* lay = new QVBoxLayout;
     lay->addWidget(browser);
