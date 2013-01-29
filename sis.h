@@ -62,6 +62,8 @@ private:
 
   void openTab(QTcpSocket* socket);
   void reOpenTab(QTcpSocket* socket);
+  void closeAllTabs();
+
 private slots:
   void transfer();
   void newConversation();

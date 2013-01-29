@@ -497,6 +497,7 @@ void SIS::openTab(QTcpSocket *socket)
     }
     if(!window->isVisible())
     {
+        closeAllTabs();
         window->show();
     }
 
@@ -520,8 +521,21 @@ void SIS::openTab(QTcpSocket *socket)
 
 void SIS::reOpenTab(QTcpSocket *socket)
 {
+    if(!window->isVisible())
+    {
+        closeAllTabs();
+        window->show();
+    }
     datas data = networkMap[socket];
     int tabId = window->addTab(data.container, "Socket " + QString::number(socket->socketDescriptor()));
     networkMap[socket].tabId = tabId;
     tabMap.insert({tabId, {socket_edit[socket], socket}});
+}
+
+void SIS::closeAllTabs()
+{
+    tabMap.clear();
+    for(unordered_map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
+        it->second.tabId = -1;
+    window->clear();
 }
