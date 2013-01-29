@@ -73,6 +73,7 @@ private slots:
   void disconnected();
   void clearColor(int);
   void closeTab(int);
+  void moveTab(int from, int to);
 };
 
 #endif // SIS_H

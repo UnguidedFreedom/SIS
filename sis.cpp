@@ -19,10 +19,11 @@ SIS::SIS(QWidget *parent)
 
     window = new QTabsWidget;
     window->setTabsClosable(true);
+    window->setMovable(true);
     connect(window, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
     tabBar = window->tabBar();
-
     connect(tabBar, SIGNAL(currentChanged(int)), this, SLOT(clearColor(int)));
+    connect(tabBar, SIGNAL(tabMoved(int,int)), this, SLOT(moveTab(int,int)));
 
     // Initializing
     init = QCA::Initializer();
@@ -538,4 +539,19 @@ void SIS::closeAllTabs()
     for(unordered_map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
         it->second.tabId = -1;
     window->clear();
+}
+
+void SIS::moveTab(int from, int to)
+{
+    networkMap[tabMap[from].second].tabId = to;
+    networkMap[tabMap[to].second].tabId = from;
+
+    pair<QMessageEdit*, QTcpSocket*> dataFrom = tabMap[from];
+    tabMap.erase(from);
+
+    pair<QMessageEdit*, QTcpSocket*> dataTo = tabMap[to];
+    tabMap.erase(to);
+
+    tabMap.insert({to, dataFrom});
+    tabMap.insert({from, dataTo});
 }
