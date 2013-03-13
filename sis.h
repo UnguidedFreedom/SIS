@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <QtGui>
 #include <QtNetwork>
+#include <phonon/phonon>
 #include <QtCrypto/qca.h>
 #include <unordered_map>
 #include "qmessageedit.h"
@@ -44,6 +45,7 @@ struct datas {
     QCA::SymmetricKey key;
     QCA::PublicKey pubKey;
     quint16 messageSize;
+    QString nickname;
 };
 
 class SIS : public QMainWindow
@@ -52,7 +54,7 @@ class SIS : public QMainWindow
 
 enum Type
 {
-    givePubK, replyPubK, giveBF, replyBF, text
+    givePubK, replyPubK, giveBF, replyBF, text, giveNick, replyNick
 };
 
 public:
@@ -65,6 +67,9 @@ private:
   QTabsWidget* window;
   QTabBar* tabBar;
 
+  QSettings* settings;
+  QString nickname;
+
   QCA::Initializer init;
 
   QCA::PrivateKey privateKey;
@@ -75,7 +80,7 @@ private:
   unordered_map<QMessageEdit*, QTcpSocket*> edit_socket;
   unordered_map<QTcpSocket*, QMessageEdit*> socket_edit;
 
-  unordered_map<QTcpSocket*, datas> networkMap; // int = tabIndex
+  unordered_map<QTcpSocket*, datas> networkMap;
   map<int, pair<QMessageEdit*, QTcpSocket*> > tabMap;
 
   void openTab(QTcpSocket* socket);

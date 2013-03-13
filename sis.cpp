@@ -21,6 +21,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 SIS::SIS(QWidget *parent)
   : QMainWindow(parent)
 {
+    settings = new QSettings;
+
     state = new QMessagesBrowser;
 
     button = new QPushButton("Connect to host");
@@ -86,7 +88,9 @@ SIS::SIS(QWidget *parent)
     QElapsedTimer* timer = new QElapsedTimer;
     timer->start();
 
-    if(!QFile::exists(qApp->applicationDirPath() + "/privatekey.pem"))
+    QString privateKeyTmp = settings->value("privateKey", "").toString();
+
+    if(privateKeyTmp.trimmed() == "")
     {
 
         //Generating the private key
@@ -117,9 +121,10 @@ SIS::SIS(QWidget *parent)
 
         if(passOne.trimmed().size() != 0)
         {
-            //Saving the private key to a protected file
+            //Saving the private key to the settings
             QCA::SecureArray passPhrase = passOne.toUtf8();
-            privateKey.toPEMFile(qApp->applicationDirPath() + "/privatekey.pem", passPhrase);
+            privateKeyTmp = privateKey.toPEM(passPhrase);
+            settings->setValue("privateKey", privateKeyTmp);
         }
         else
         {
@@ -129,10 +134,10 @@ SIS::SIS(QWidget *parent)
     }
     else
     {
-        //Reading the private key from the file
+        //Reading the private key from the settings
         QCA::ConvertResult conversionResult;
         QString pass = QInputDialog::getText(this, "Sign in", "Enter your password to sign in:", QLineEdit::Password);
-        privateKey = QCA::PrivateKey::fromPEMFile(qApp->applicationDirPath() + "/privatekey.pem", pass.toUtf8(), &conversionResult);
+        privateKey = QCA::PrivateKey::fromPEM(privateKeyTmp, pass.toUtf8(), &conversionResult);
         if(! (QCA::ConvertGood == conversionResult) )
         {
             state->setText("Unable to read key from file");
@@ -148,6 +153,21 @@ SIS::SIS(QWidget *parent)
         qDebug() << "Error: this kind of key cannot encrypt";
         return;
     }
+
+    nickname = settings->value("nickname", "").toString();
+
+    while(nickname.trimmed() == "")
+    {
+        bool ok;
+        nickname = QInputDialog::getText(this, "Pick a nickname", "Enter your nickname:", QLineEdit::Normal, "", &ok);
+        if(!ok)
+        {
+            state->setText("No nickname given");
+            return;
+        }
+    }
+
+    settings->setValue("nickname", nickname.trimmed());
 
     server = new QTcpServer;
     if(!server->listen(QHostAddress::Any, 50000))
@@ -237,7 +257,7 @@ void SIS::transfer()
     QTime time = QDateTime::currentDateTime().time();
     QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
     t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>Me: </b></span>" + t);
+    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>" + nickname + ": </b></span>" + t);
     edit->clear();
 }
 
@@ -379,6 +399,89 @@ void SIS::dataReceived()
 
         if(decrypt != pairs.key)
             socket->disconnectFromHost();
+
+        QCA::InitializationVector iv = QCA::InitializationVector(16);
+        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, pairs.key, iv);
+
+        QCA::SecureArray secureData = nickname.toUtf8();
+        QCA::SecureArray encryptedData = cipher.process(secureData);
+        if(!cipher.ok())
+        {
+          qDebug() << "Encryption failed!";
+         // return;
+        }
+
+        QByteArray packet; // packet for sending the public key
+        QDataStream out(&packet, QIODevice::WriteOnly);
+
+        out << (quint16) 0; // writing 0 while not knowing the size
+        out << giveNick;
+        out << encryptedData.toByteArray();
+        out << iv.toByteArray();
+        out.device()->seek(0);
+        out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
+
+        socket->write(packet);
+    }
+    else if(type == giveNick)
+    {
+        QByteArray initVector;
+        in >> initVector;
+        QCA::InitializationVector iv = initVector;
+        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, pairs.key, iv);
+        QCA::SecureArray datas = data;
+        QCA::SecureArray decryptedData = cipher.process(datas);
+        if(!cipher.ok())
+        {
+            qDebug() << "Decryption failed!";
+            browser->append("<b>Decryption failed</b>");
+            return;
+        }
+        networkMap[socket].nickname = QString::fromUtf8(decryptedData.data());
+
+        iv = QCA::InitializationVector(16);
+        cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, pairs.key, iv);
+
+        QCA::SecureArray secureData = nickname.toUtf8();
+        QCA::SecureArray encryptedData = cipher.process(secureData);
+        if(!cipher.ok())
+        {
+          qDebug() << "Encryption failed!";
+         // return;
+        }
+
+        QByteArray packet; // packet for sending the public key
+        QDataStream out(&packet, QIODevice::WriteOnly);
+
+        out << (quint16) 0; // writing 0 while not knowing the size
+        out << replyNick;
+        out << encryptedData.toByteArray();
+        out << iv.toByteArray();
+        out.device()->seek(0);
+        out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
+
+      //  QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
+        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
+
+        socket->write(packet);
+    }
+    else if(type == replyNick)
+    {
+        QByteArray initVector;
+        in >> initVector;
+        QCA::InitializationVector iv = initVector;
+        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, pairs.key, iv);
+        QCA::SecureArray datas = data;
+        QCA::SecureArray decryptedData = cipher.process(datas);
+        if(!cipher.ok())
+        {
+            qDebug() << "Decryption failed!";
+            browser->append("<b>Decryption failed</b>");
+            return;
+        }
+        networkMap[socket].nickname = QString::fromUtf8(decryptedData.data());
+        //QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
+        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
     }
     else if(type == text)
     {
@@ -395,6 +498,8 @@ void SIS::dataReceived()
           qDebug() << "Error using blowfish";
           return;
         }
+      //  QSound receive(qApp->applicationDirPath() + "/sounds/receive.wav");
+        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/ReceiveP.mp3"))->play();
         QByteArray initVector;
         in >> initVector;
         QCA::InitializationVector iv = initVector;
@@ -412,16 +517,17 @@ void SIS::dataReceived()
 
         QString t = Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
         t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>Other: </b></span>" + t);
+        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + pairs.nickname + ": </b></span>" + t);
     }
 }
 
 void SIS::requestNewConnection()
 {
     bool ok;
-    QString ip = QInputDialog::getText(this, "IP address", "Enter the IP address (IP:port) to which you want to connect:", QLineEdit::Normal, "", &ok);
+    QString ip = QInputDialog::getText(this, "IP address", "Enter the IP address (IP:port) to which you want to connect:", QLineEdit::Normal, settings->value("lastIP", "").toString(), &ok);
     if(!ok)
         return;
+    settings->setValue("lastIP", ip);
     QStringList address = ip.split(':');
     QTcpSocket* socket = new QTcpSocket;
     socket->connectToHost(address[0], address.at(1).toInt());
@@ -493,7 +599,7 @@ void SIS::openTab(QTcpSocket *socket)
 {
     QMessagesBrowser* browser = new QMessagesBrowser;
     browser->setOpenExternalLinks(true);
-    QMessageEdit* edit = new QMessageEdit(window);
+    QMessageEdit* edit = new QMessageEdit;
     edit->setFocusPolicy(Qt::StrongFocus);
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
     connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
@@ -531,6 +637,7 @@ void SIS::openTab(QTcpSocket *socket)
     current.tabId = tabId;
     current.container = cont;
     current.messageSize = 0;
+    current.nickname = "Other";
 
     networkMap.insert({socket, current});
     tabMap.insert({tabId, {edit, socket}});

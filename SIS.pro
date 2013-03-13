@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui network
+QT       += core gui network phonon
 
 win32 {
     LIBS += -lqca2
