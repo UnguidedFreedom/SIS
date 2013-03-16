@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <unordered_map>
 #include "qmessageedit.h"
 #include "qmessagesbrowser.h"
+#include "qwindow.h"
 
 using namespace std;
 
@@ -64,8 +65,7 @@ private:
   QMessagesBrowser* state;
   QPushButton* button;
 
-  QTabsWidget* window;
-  QTabBar* tabBar;
+  QWindow* window;
 
   QSettings* settings;
   QString nickname;
@@ -94,7 +94,6 @@ private slots:
   void requestNewConnection();
   void connected();
   void disconnected();
-  void clearColor(int);
   void closeTab(int);
   void moveTab(int from, int to);
 };
