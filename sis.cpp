@@ -21,7 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 SIS::SIS(QWidget *parent)
   : QMainWindow(parent)
 {
-    settings = new QSettings;
+    settings = new QSettings(QSettings::UserScope, qApp->organizationName(), qApp->applicationName());
 
     state = new QMessagesBrowser;
 
@@ -609,8 +609,11 @@ void SIS::openTab(QTcpSocket *socket)
 
     if(window->count() == 0)
     {
-        window->show();
-        window->setGeometry(2*QApplication::desktop()->width()/5, QApplication::desktop()->height()/4, QApplication::desktop()->width()/5, QApplication::desktop()->height()/2);
+        window->setGeometry(settings->value("dimensions", QRect(2*QApplication::desktop()->width()/5, QApplication::desktop()->height()/4, QApplication::desktop()->width()/5, QApplication::desktop()->height()/2)).toRect());
+        if(settings->value("maximized", false).toBool())
+            window->showMaximized();
+        else
+            window->show();
     }
     if(!window->isVisible())
     {
