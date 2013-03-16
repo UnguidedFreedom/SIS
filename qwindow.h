@@ -2,7 +2,6 @@
 #define QWINDOW_H
 
 #include <QtGui>
-#include "qtabswidget.h"
 
 class QWindow : public QMainWindow
 {
@@ -20,6 +19,7 @@ public:
 signals:
     void tabCloseRequested(int);
     void tabMoved(int, int);
+    void closed();
     
 public slots:
     void closeTab(int);
@@ -29,8 +29,8 @@ public slots:
     void previousTab();
 
 private:
-    QTabsWidget* window;
     QTabBar* tabBar;
+    QStackedWidget* conversations;
     int tabs;
     QSettings* settings;
     virtual void closeEvent(QCloseEvent *event);

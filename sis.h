@@ -85,7 +85,6 @@ private:
 
   void openTab(QTcpSocket* socket);
   void reOpenTab(QTcpSocket* socket);
-  void closeAllTabs();
 
 private slots:
   void transfer();
@@ -96,6 +95,7 @@ private slots:
   void disconnected();
   void closeTab(int);
   void moveTab(int from, int to);
+  void closeAllTabs();
 };
 
 #endif // SIS_H

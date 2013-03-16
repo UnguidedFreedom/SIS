@@ -41,6 +41,9 @@ SIS::SIS(QWidget *parent)
     window->setSettings(settings);
     connect(window, SIGNAL(tabMoved(int,int)), this, SLOT(moveTab(int,int)));
     connect(window, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
+    connect(window, SIGNAL(closed()), this, SLOT(closeAllTabs()));
+
+    window->setGeometry(settings->value("dimensions", QRect(2*QApplication::desktop()->width()/5, QApplication::desktop()->height()/4, QApplication::desktop()->width()/5, QApplication::desktop()->height()/2)).toRect());
 
     // Initializing
     init = QCA::Initializer();
@@ -607,19 +610,14 @@ void SIS::openTab(QTcpSocket *socket)
     QWidget* cont = new QWidget;
     cont->setLayout(lay);
 
-    if(window->count() == 0)
+    if(!window->isVisible())
     {
-        window->setGeometry(settings->value("dimensions", QRect(2*QApplication::desktop()->width()/5, QApplication::desktop()->height()/4, QApplication::desktop()->width()/5, QApplication::desktop()->height()/2)).toRect());
         if(settings->value("maximized", false).toBool())
             window->showMaximized();
         else
             window->show();
     }
-    if(!window->isVisible())
-    {
-        closeAllTabs();
-        window->show();
-    }
+
 
     int tabId = window->addTab(cont, "Socket " + QString::number(socket->socketDescriptor()));
     window->setTabTextColor(tabId, Qt::black);
@@ -645,9 +643,12 @@ void SIS::reOpenTab(QTcpSocket *socket)
 {
     if(!window->isVisible())
     {
-        closeAllTabs();
-        window->show();
+        if(settings->value("maximized", false).toBool())
+            window->showMaximized();
+        else
+            window->show();
     }
+
     datas data = networkMap[socket];
     int tabId = window->addTab(data.container, "Socket " + QString::number(socket->socketDescriptor()));
     networkMap[socket].tabId = tabId;
@@ -660,8 +661,6 @@ void SIS::closeAllTabs()
     tabMap.clear();
     for(unordered_map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
         it->second.tabId = -1;
-    window->clear();
-    window->update();
 }
 
 void SIS::moveTab(int from, int to)

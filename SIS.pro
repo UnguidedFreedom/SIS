@@ -26,10 +26,10 @@ TEMPLATE = app
 SOURCES += main.cpp\
         sis.cpp \
     qmessageedit.cpp \
-    qtabswidget.cpp \
-    qmessagesbrowser.cpp
+    qmessagesbrowser.cpp \
+    qwindow.cpp
 
 HEADERS  += sis.h \
     qmessageedit.h \
-    qtabswidget.h \
-    qmessagesbrowser.h
+    qmessagesbrowser.h \
+    qwindow.h
