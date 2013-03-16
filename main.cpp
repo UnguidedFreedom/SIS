@@ -18,11 +18,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 #include <QApplication>
+#include <QCoreApplication>
 #include "sis.h"
 
 int main(int argc, char *argv[])
 {
   QApplication a(argc, argv);
+
+  QCoreApplication::setOrganizationName("CamelCorp");
+  QCoreApplication::setApplicationName("SIS");
+
   SIS w;
   w.show();
   
