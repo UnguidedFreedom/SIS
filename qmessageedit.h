@@ -21,7 +21,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <QTextEdit>
 #include <QKeyEvent>
-#include "qtabswidget.h"
 
 class QMessageEdit : public QTextEdit
 {
