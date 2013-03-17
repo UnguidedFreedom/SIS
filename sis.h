@@ -24,6 +24,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <phonon/phonon>
 #include <QtCrypto/qca.h>
 #include <unordered_map>
+#include "friend.h"
 #include "qmessageedit.h"
 #include "qmessagesbrowser.h"
 #include "qwindow.h"
@@ -44,9 +45,8 @@ struct datas {
     QWidget* container;
     QMessagesBrowser* browser;
     QCA::SymmetricKey key;
-    QCA::PublicKey pubKey;
+    Friend contact;
     quint16 messageSize;
-    QString nickname;
 };
 
 class SIS : public QMainWindow

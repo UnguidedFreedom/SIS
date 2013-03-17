@@ -33,3 +33,9 @@ HEADERS  += sis.h \
     qmessageedit.h \
     qmessagesbrowser.h \
     qwindow.h
+
+HEADERS += \
+    friend.h
+
+SOURCES += \
+    friend.cpp

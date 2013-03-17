@@ -209,11 +209,11 @@ SIS::SIS(QWidget *parent)
 
 void SIS::transfer()
 {
-    QCA::InitializationVector iv = QCA::InitializationVector(16);
+    QCA::InitializationVector iv = QCA::InitializationVector(256);
 
-    if (!QCA::isSupported("blowfish-cbc"))
+    if (!QCA::isSupported("aes256-cbc-pkcs7"))
     {
-      qDebug() << "Error using blowfish";
+      qDebug() << "Error using aes256";
       return;
     }
 
@@ -225,12 +225,12 @@ void SIS::transfer()
         return;
 
     QTcpSocket* socket = edit_socket[edit];
-    datas pairs = networkMap[socket];
-    QMessagesBrowser* browser = pairs.browser;
-    QCA::SymmetricKey key = pairs.key;
+    datas conversation = networkMap[socket];
+    QMessagesBrowser* browser = conversation.browser;
+    QCA::SymmetricKey key = conversation.key;
 
     //Encoding with the original key
-    QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, key, iv);
+    QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, key, iv);
 
     QString currText = edit->toPlainText().replace("\n", "<br />");
     QCA::SecureArray secureData = currText.toUtf8();
@@ -277,19 +277,19 @@ void SIS::dataReceived()
     if(socket == 0)
         return;
 
-    datas pairs = networkMap[socket];
+    datas& conversation = networkMap[socket];
 
     QDataStream in(socket);
 
-    if (pairs.messageSize == 0)
+    if (conversation.messageSize == 0)
     {
         if (socket->bytesAvailable() < (int)sizeof(quint16)) // messageSize not entierly received
              return;
 
-        in >> pairs.messageSize; // messageSize received
+        in >> conversation.messageSize; // messageSize received
     }
 
-    if(socket->bytesAvailable() < pairs.messageSize)
+    if(socket->bytesAvailable() < conversation.messageSize)
         return;
 
     int type;
@@ -298,10 +298,10 @@ void SIS::dataReceived()
     QByteArray data;
     in >> data;
 
-    int tabId = pairs.tabId;
-    QMessagesBrowser* browser = pairs.browser;
+    int tabId = conversation.tabId;
+    QMessagesBrowser* browser = conversation.browser;
 
-    pairs.messageSize = 0;
+    conversation.messageSize = 0;
 
     if(type == givePubK)
     {
@@ -311,7 +311,8 @@ void SIS::dataReceived()
         pubKey = datas;
         delete [] datas;
 
-        networkMap[socket].pubKey = QCA::PublicKey::fromPEM(pubKey);
+        Friend contact(QCA::PublicKey::fromPEM(pubKey));
+        conversation.contact = contact;
 
         QByteArray packet; // packet for sending the public key
         QDataStream out(&packet, QIODevice::WriteOnly);
@@ -331,7 +332,8 @@ void SIS::dataReceived()
         strcpy(received, data.data());
         pubKey = received;
 
-        networkMap[socket].pubKey = QCA::PublicKey::fromPEM(pubKey);
+        Friend contact(QCA::PublicKey::fromPEM(pubKey));
+        conversation.contact = contact;
 
         delete [] received;
 
@@ -342,13 +344,13 @@ void SIS::dataReceived()
         out << giveBF;
 
         //Generating a symmetric key
-        QCA::SymmetricKey key = QCA::SymmetricKey(16);
-        networkMap[socket].key = key;
+        QCA::SymmetricKey key = QCA::SymmetricKey(256);
+        conversation.key = key;
 
         QCA::SecureArray keyArr = key.toByteArray();
 
         //Encoding it
-        QCA::SecureArray result = networkMap[socket].pubKey.encrypt(keyArr, QCA::EME_PKCS1_OAEP);
+        QCA::SecureArray result = conversation.contact.getPubKey().encrypt(keyArr, QCA::EME_PKCS1_OAEP);
 
         //Sending it
         out << result.toByteArray();
@@ -368,7 +370,7 @@ void SIS::dataReceived()
         }
 
         QCA::SymmetricKey key = decrypt;
-        networkMap[socket].key = key;
+        conversation.key = key;
 
         QByteArray packet; // packet for sending the public key
         QDataStream out(&packet, QIODevice::WriteOnly);
@@ -378,7 +380,7 @@ void SIS::dataReceived()
 
         //Encoding it back
         QCA::SecureArray keyArr = key.toByteArray();
-        QCA::SecureArray resultBis = networkMap[socket].pubKey.encrypt(keyArr, QCA::EME_PKCS1_OAEP);
+        QCA::SecureArray resultBis = conversation.contact.getPubKey().encrypt(keyArr, QCA::EME_PKCS1_OAEP);
 
         //Sending it
         out << resultBis.toByteArray();
@@ -397,11 +399,11 @@ void SIS::dataReceived()
             return;
         }
 
-        if(decrypt != pairs.key)
+        if(decrypt != conversation.key)
             socket->disconnectFromHost();
 
-        QCA::InitializationVector iv = QCA::InitializationVector(16);
-        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, pairs.key, iv);
+        QCA::InitializationVector iv = QCA::InitializationVector(256);
+        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, conversation.key, iv);
 
         QCA::SecureArray secureData = nickname.toUtf8();
         QCA::SecureArray encryptedData = cipher.process(secureData);
@@ -428,7 +430,7 @@ void SIS::dataReceived()
         QByteArray initVector;
         in >> initVector;
         QCA::InitializationVector iv = initVector;
-        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, pairs.key, iv);
+        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
         QCA::SecureArray datas = data;
         QCA::SecureArray decryptedData = cipher.process(datas);
         if(!cipher.ok())
@@ -437,10 +439,10 @@ void SIS::dataReceived()
             browser->append("<b>Decryption failed</b>");
             return;
         }
-        networkMap[socket].nickname = QString::fromUtf8(decryptedData.data());
+        conversation.contact.setNickname(QString::fromUtf8(decryptedData.data()));
 
-        iv = QCA::InitializationVector(16);
-        cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, pairs.key, iv);
+        iv = QCA::InitializationVector(256);
+        cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, conversation.key, iv);
 
         QCA::SecureArray secureData = nickname.toUtf8();
         QCA::SecureArray encryptedData = cipher.process(secureData);
@@ -470,7 +472,7 @@ void SIS::dataReceived()
         QByteArray initVector;
         in >> initVector;
         QCA::InitializationVector iv = initVector;
-        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, pairs.key, iv);
+        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
         QCA::SecureArray datas = data;
         QCA::SecureArray decryptedData = cipher.process(datas);
         if(!cipher.ok())
@@ -479,7 +481,7 @@ void SIS::dataReceived()
             browser->append("<b>Decryption failed</b>");
             return;
         }
-        networkMap[socket].nickname = QString::fromUtf8(decryptedData.data());
+        conversation.contact.setNickname(QString::fromUtf8(decryptedData.data()));
         //QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
         Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
     }
@@ -488,14 +490,14 @@ void SIS::dataReceived()
         if(tabId == -1)
         {
             reOpenTab(socket);
-            tabId = networkMap[socket].tabId;
+            tabId = conversation.tabId;
         }
         if(window->currentIndex() != tabId)
             window->setTabTextColor(tabId, Qt::blue);
 
-        if (!QCA::isSupported("blowfish-cbc"))
+        if (!QCA::isSupported("aes256-cbc-pkcs7"))
         {
-          qDebug() << "Error using blowfish";
+          qDebug() << "Error using AES";
           return;
         }
       //  QSound receive(qApp->applicationDirPath() + "/sounds/receive.wav");
@@ -503,9 +505,10 @@ void SIS::dataReceived()
         QByteArray initVector;
         in >> initVector;
         QCA::InitializationVector iv = initVector;
-        QCA::Cipher cipher = QCA::Cipher("blowfish", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, pairs.key, iv);
-        QCA::SecureArray datas = data;
-        QCA::SecureArray decryptedData = cipher.process(datas);
+        qDebug() << qPrintable(QCA::arrayToHex(data)) << qPrintable(QCA::arrayToHex(initVector));
+        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
+        QCA::SecureArray myDatas = data;
+        QCA::SecureArray decryptedData = cipher.process(myDatas);
         if(!cipher.ok())
         {
             qDebug() << "Decryption failed!";
@@ -517,7 +520,7 @@ void SIS::dataReceived()
 
         QString t = Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
         t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + pairs.nickname + ": </b></span>" + t);
+        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + conversation.contact.getNickname() + ": </b></span>" + t);
     }
 }
 
@@ -630,7 +633,6 @@ void SIS::openTab(QTcpSocket *socket)
     current.tabId = tabId;
     current.container = cont;
     current.messageSize = 0;
-    current.nickname = "Other";
 
     networkMap.insert({socket, current});
     tabMap.insert({tabId, {edit, socket}});
