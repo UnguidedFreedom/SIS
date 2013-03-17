@@ -571,7 +571,7 @@ void SIS::disconnected()
 void SIS::closeTab(int tab)
 {
     networkMap[tabMap[tab].second].tabId = -1;
-    for(unordered_map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
+    for(map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
     {
         if(it->second.tabId > tab)
             it->second.tabId--;
@@ -586,7 +586,7 @@ void SIS::closeTab(int tab)
             int currTabId = it->first;
             pair<QMessageEdit*, QTcpSocket*> current = it->second;
             tabMap.erase(currTabId);
-            tabMap.insert({currTabId-1, current});
+            tabMap[currTabId-1] = current;
         }
     }
     window->update();
@@ -624,8 +624,8 @@ void SIS::openTab(QTcpSocket *socket)
     int tabId = window->addTab(cont, "Socket " + QString::number(socket->socketDescriptor()));
     window->setTabTextColor(tabId, Qt::black);
 
-    edit_socket.insert({edit,socket});
-    socket_edit.insert({socket, edit});
+    edit_socket[edit] = socket;
+    socket_edit[socket] = edit;
 
     datas current;
     current.browser = browser;
@@ -633,8 +633,8 @@ void SIS::openTab(QTcpSocket *socket)
     current.container = cont;
     current.messageSize = 0;
 
-    networkMap.insert({socket, current});
-    tabMap.insert({tabId, {edit, socket}});
+    networkMap[socket] = current;
+    tabMap[tabId] = pair<QMessageEdit*, QTcpSocket*>(edit, socket);
 
     edit->setFocus();
     window->update();
@@ -653,14 +653,14 @@ void SIS::reOpenTab(QTcpSocket *socket)
     datas data = networkMap[socket];
     int tabId = window->addTab(data.container, "Socket " + QString::number(socket->socketDescriptor()));
     networkMap[socket].tabId = tabId;
-    tabMap.insert({tabId, {socket_edit[socket], socket}});
+    tabMap[tabId] = pair<QMessageEdit*, QTcpSocket*>(socket_edit[socket], socket);
     window->update();
 }
 
 void SIS::closeAllTabs()
 {
     tabMap.clear();
-    for(unordered_map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
+    for(map<QTcpSocket*, datas>::iterator it = networkMap.begin(); it != networkMap.end(); it++)
         it->second.tabId = -1;
 }
 
@@ -670,11 +670,7 @@ void SIS::moveTab(int from, int to)
     networkMap[tabMap[to].second].tabId = from;
 
     pair<QMessageEdit*, QTcpSocket*> dataFrom = tabMap[from];
-    tabMap.erase(from);
 
-    pair<QMessageEdit*, QTcpSocket*> dataTo = tabMap[to];
-    tabMap.erase(to);
-
-    tabMap.insert({to, dataFrom});
-    tabMap.insert({from, dataTo});
+    tabMap[from] = tabMap[to];
+    tabMap[to] = dataFrom;
 }

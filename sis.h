@@ -23,7 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <QtNetwork>
 #include <phonon/phonon>
 #include <QtCrypto/qca.h>
-#include <unordered_map>
+#include <map>
 #include "friend.h"
 #include "qmessageedit.h"
 #include "qmessagesbrowser.h"
@@ -77,10 +77,10 @@ private:
 
   QTcpServer* server;
 
-  unordered_map<QMessageEdit*, QTcpSocket*> edit_socket;
-  unordered_map<QTcpSocket*, QMessageEdit*> socket_edit;
+  map<QMessageEdit*, QTcpSocket*> edit_socket;
+  map<QTcpSocket*, QMessageEdit*> socket_edit;
 
-  unordered_map<QTcpSocket*, datas> networkMap;
+  map<QTcpSocket*, datas> networkMap;
   map<int, pair<QMessageEdit*, QTcpSocket*> > tabMap;
 
   void openTab(QTcpSocket* socket);
