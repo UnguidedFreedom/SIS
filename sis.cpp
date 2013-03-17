@@ -505,7 +505,6 @@ void SIS::dataReceived()
         QByteArray initVector;
         in >> initVector;
         QCA::InitializationVector iv = initVector;
-        qDebug() << qPrintable(QCA::arrayToHex(data)) << qPrintable(QCA::arrayToHex(initVector));
         QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
         QCA::SecureArray myDatas = data;
         QCA::SecureArray decryptedData = cipher.process(myDatas);
