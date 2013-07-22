@@ -22,7 +22,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <QtGui>
 #include <QtNetwork>
 #include <phonon/phonon>
-#include <QtCrypto/qca.h>
+
+#include <cryptopp/modes.h>
+#include <cryptopp/aes.h>
+#include <cryptopp/filters.h>
+#include <cryptopp/osrng.h>
+#include <cryptopp/rsa.h>
+#include <cryptopp/ripemd.h>
+#include <cryptopp/hex.h>
+
 #include <map>
 #include "friend.h"
 #include "qmessageedit.h"
@@ -30,21 +38,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "qwindow.h"
 
 using namespace std;
-
-/*
-
- Packets will be :
-
- quint16    Type    QByteArray
- size       type    data
-
- */
+using namespace CryptoPP;
 
 struct datas {
     int tabId;
     QWidget* container;
     QMessagesBrowser* browser;
-    QCA::SymmetricKey key;
+    byte* key;
     Friend contact;
     quint16 messageSize;
 };
@@ -55,7 +55,7 @@ class SIS : public QMainWindow
 
 enum Type
 {
-    givePubK, replyPubK, giveBF, replyBF, text, giveNick, replyNick
+    text, giveAES, replyAES, giveNick, replyNick, givePubK, replyPubK
 };
 
 public:
@@ -70,12 +70,13 @@ private:
   QSettings* settings;
   QString nickname;
 
-  QCA::Initializer init;
+  RSA::PrivateKey privateKey;
+  RSA::PublicKey publicKey;
 
-  QCA::PrivateKey privateKey;
-  QCA::PublicKey publicKey;
+  AutoSeededRandomPool rng;
 
   QTcpServer* server;
+  int port;
 
   map<QMessageEdit*, QTcpSocket*> edit_socket;
   map<QTcpSocket*, QMessageEdit*> socket_edit;

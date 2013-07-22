@@ -6,16 +6,7 @@
 
 QT       += core gui network phonon
 
-win32 {
-    LIBS += -lqca2
-    LIBS += -L$quote(C:\Users\Vernier\qca-ossl-2.0.0-beta3\lib) -lqca-ossl2
-}
-unix {
-    LIBS += -lqca
-    LIBS += -lssl
-}
-
-CONFIG *= crypto
+LIBS += -lcryptopp
 
 TARGET = SIS
 TEMPLATE = app
@@ -25,15 +16,11 @@ SOURCES += main.cpp\
         sis.cpp \
     qmessageedit.cpp \
     qmessagesbrowser.cpp \
-    qwindow.cpp
+    qwindow.cpp \
+    friend.cpp
 
 HEADERS  += sis.h \
     qmessageedit.h \
     qmessagesbrowser.h \
-    qwindow.h
-
-HEADERS += \
+    qwindow.h \
     friend.h
-
-SOURCES += \
-    friend.cpp

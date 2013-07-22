@@ -1,19 +1,22 @@
 #ifndef FRIEND_H
 #define FRIEND_H
 
-#include <QtCrypto/qca.h>
+#include <QString>
+#include <cryptopp/rsa.h>
+
+using namespace CryptoPP;
 
 class Friend
 {
 public:
     Friend();
-    Friend(QCA::PublicKey);
-    QCA::PublicKey getPubKey();
+    Friend(RSA::PublicKey);
+    RSA::PublicKey getPubKey();
     void setNickname(QString name);
     QString getNickname();
 
 private:
-    QCA::PublicKey pubKey;
+    RSA::PublicKey pubKey;
     QString nickname;
 };
 

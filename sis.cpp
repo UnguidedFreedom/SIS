@@ -45,46 +45,6 @@ SIS::SIS(QWidget *parent)
 
     window->setGeometry(settings->value("dimensions", QRect(2*QApplication::desktop()->width()/5, QApplication::desktop()->height()/4, QApplication::desktop()->width()/5, QApplication::desktop()->height()/2)).toRect());
 
-    // Initializing
-    init = QCA::Initializer();
-
-    //Checking if RSA is supported
-    if(!QCA::isSupported("pkey"))
-    {
-        state->setText("pkey not supported");
-        QString info;
-        QCA::scanForPlugins();
-
-        // this gives us all the plugin providers as a list
-        QCA::ProviderList qcaProviders = QCA::providers();
-        for ( int i = 0; i < qcaProviders.size(); ++i )
-        {
-            // each provider has a name, which we can display
-            info += qcaProviders[i]->name() + ": ";
-            // ... and also a list of features
-            QStringList capabilities = qcaProviders[i]->features();
-            // we turn the string list back into a single string,
-            // and display it as well
-            info += capabilities.join(", ") + "\n";
-        }
-
-        // Note that the default provider isn't included in
-        // the result of QCA::providers()
-        info += "default: ";
-        // However it is still possible to get the features
-        // supported by the default provider
-        QStringList capabilities = QCA::defaultFeatures();
-        info += capabilities.join(", ") + "\n";
-        state->append(info);
-
-        return;
-    }
-    if(!QCA::PKey::supportedIOTypes().contains(QCA::PKey::RSA))
-    {
-        state->setText("RSA not supported");
-        return;
-    }
-
     QElapsedTimer* timer = new QElapsedTimer;
     timer->start();
 
@@ -92,10 +52,14 @@ SIS::SIS(QWidget *parent)
 
     if(privateKeyTmp.trimmed() == "")
     {
-
         //Generating the private key
-        privateKey = QCA::KeyGenerator().createRSA(4096);
-        if(privateKey.isNull())
+        InvertibleRSAFunction params;
+        params.GenerateRandomWithKeySize(rng, 4096);
+
+        privateKey = RSA::PrivateKey(params);
+        publicKey = RSA::PublicKey(params);
+
+        if(!privateKey.Validate(rng, 3))
         {
             state->setText("Failed to generate secret key");
             qDebug() << "Failed to generate secret key";
@@ -121,10 +85,48 @@ SIS::SIS(QWidget *parent)
 
         if(passOne.trimmed().size() != 0)
         {
-            //Saving the private key to the settings
-            QCA::SecureArray passPhrase = passOne.toUtf8();
-            privateKeyTmp = privateKey.toPEM(passPhrase);
-            settings->setValue("privateKey", privateKeyTmp);
+            QByteArray passPhrase = passOne.toUtf8();
+
+            string privKeyDer;
+            StringSink privKeyDerSink(privKeyDer);
+            privateKey.DEREncode(privKeyDerSink);
+
+            QString privKeyQString;
+            for(unsigned int i=0; i<privKeyDer.length(); i++)
+                privKeyQString += QString::number(privKeyDer[i]) + " ";
+            qDebug() << privKeyQString;
+
+            //Hash the pass phrase to create 128 bit key
+            string hashedPass;
+            RIPEMD128 hash;
+            StringSource(string(passPhrase.data()), true, new HashFilter(hash, new StringSink(hashedPass)));
+
+            // Generate a random IV
+            byte iv[AES::BLOCKSIZE];
+            rng.GenerateBlock(iv, AES::BLOCKSIZE);
+
+            //Encrypt private key
+            CFB_Mode<AES>::Encryption cfbEncryption((const unsigned char*)hashedPass.c_str(), hashedPass.length(), iv);
+            byte encPrivKey[privKeyDer.length()];
+            cfbEncryption.ProcessData(encPrivKey, (const byte*)privKeyDer.c_str(), privKeyDer.length());
+            string encPrivKeyStr((char *)encPrivKey, privKeyDer.length());
+
+            //Save private key to file
+            string hexEncodedPrivKey;
+            StringSource encPrivKeySrc(encPrivKeyStr, true);
+            HexEncoder sink(new StringSink(hexEncodedPrivKey));
+            encPrivKeySrc.CopyTo(sink);
+            sink.MessageEnd();
+
+            string encIvStr((char *)iv, AES::BLOCKSIZE);
+            string hexEncodedIv;
+            StringSource encIvSrc(encIvStr, true);
+            HexEncoder sinkIv(new StringSink(hexEncodedIv));
+            encIvSrc.CopyTo(sinkIv);
+            sinkIv.MessageEnd();
+
+            settings->setValue("privateKey", QString(hexEncodedPrivKey.c_str()));
+            settings->setValue("privateKeyIV", QString(hexEncodedIv.c_str()));
         }
         else
         {
@@ -134,24 +136,55 @@ SIS::SIS(QWidget *parent)
     }
     else
     {
-        //Reading the private key from the settings
-        QCA::ConvertResult conversionResult;
         QString pass = QInputDialog::getText(this, "Sign in", "Enter your password to sign in:", QLineEdit::Password);
-        privateKey = QCA::PrivateKey::fromPEM(privateKeyTmp, pass.toUtf8(), &conversionResult);
-        if(! (QCA::ConvertGood == conversionResult) )
+
+        QByteArray passPhrase = pass.toUtf8();
+
+        string hexEncodedPrivKey = settings->value("privateKey", "").toString().toStdString();
+        string encPrivKeyStr;
+        StringSource hexDecPrivKeySrc(hexEncodedPrivKey, true);
+        HexDecoder sink(new StringSink(encPrivKeyStr));
+        hexDecPrivKeySrc.CopyTo(sink);
+        sink.MessageEnd();
+
+        string hexEncodedIv = settings->value("privateKeyIV", "").toString().toStdString();
+        string sourceIv;
+        StringSource hexDecIvSrc(hexEncodedIv, true);
+        HexDecoder sinkIv(new StringSink(sourceIv));
+        hexDecIvSrc.CopyTo(sinkIv);
+        sinkIv.MessageEnd();
+
+        //Hash the pass phrase to create 128 bit key
+        string hashedPass;
+        RIPEMD128 hash;
+        StringSource(string(passPhrase.data()), true, new HashFilter(hash, new StringSink(hashedPass)));
+
+        CFB_Mode<AES>::Decryption cfbDecryption((const unsigned char*)hashedPass.c_str(), hashedPass.length(), (byte*)sourceIv.c_str());
+        byte privKeyDer[encPrivKeyStr.length()];
+        cfbDecryption.ProcessData(privKeyDer, (const byte*)encPrivKeyStr.c_str(), encPrivKeyStr.length());
+        string privKeyDerStr((char *)privKeyDer, encPrivKeyStr.length());
+
+        StringSource privKeyDerSource(privKeyDerStr, true);
+        privateKey.BERDecode(privKeyDerSource);
+
+        publicKey = RSA::PublicKey(privateKey);
+
+        if(!privateKey.Validate(rng, 3))
+        {
+            state->setText("Invalid secret key");
+            qDebug() << "Invalid secret key";
+            return;
+        }
+        else
+        {
+            state->setText("Secret key successfully loaded");
+        }
+
+        if(! true )
         {
             state->setText("Unable to read key from file");
             return;
         }
-    }
-
-    publicKey = privateKey.toPublicKey();
-
-    //Checking the validity of the public key
-    if(!publicKey.canEncrypt()) {
-        state->setText("This kind of key cannot encrypt");
-        qDebug() << "Error: this kind of key cannot encrypt";
-        return;
     }
 
     nickname = settings->value("nickname", "").toString();
@@ -170,53 +203,24 @@ SIS::SIS(QWidget *parent)
     settings->setValue("nickname", nickname.trimmed());
 
     server = new QTcpServer;
-    if(!server->listen(QHostAddress::Any, 50000))
+    port = 40000;
+    while(!server->listen(QHostAddress::Any, port) && port < 50000)
+        port++;
+    if(port == 50000)
     {
-        state->setText("Unable to start network connection");
-        qDebug() << "Unable to start network connection";
+        qDebug() << "No valid port available";
         return;
     }
+    state->append("Now listening on port " + QString::number(port));
 
     connect(server, SIGNAL(newConnection()), this, SLOT(newConversation()));
 
-    state->setText(QString::number(timer->elapsed()) + " ms to launch program");
+    state->append(QString::number(timer->elapsed()) + " ms to launch program");
     button->setEnabled(true);
-    QString info;
-    QCA::scanForPlugins();
-
-    // this gives us all the plugin providers as a list
-    QCA::ProviderList qcaProviders = QCA::providers();
-    for ( int i = 0; i < qcaProviders.size(); ++i )
-    {
-        // each provider has a name, which we can display
-        info += qcaProviders[i]->name() + ": ";
-        // ... and also a list of features
-        QStringList capabilities = qcaProviders[i]->features();
-        // we turn the string list back into a single string,
-        // and display it as well
-        info += capabilities.join(", ") + "\n";
-    }
-
-    // Note that the default provider isn't included in
-    // the result of QCA::providers()
-    info += "default: ";
-    // However it is still possible to get the features
-    // supported by the default provider
-    QStringList capabilities = QCA::defaultFeatures();
-    info += capabilities.join(", ") + "\n";
-    state->append(info);
 }
 
 void SIS::transfer()
 {
-    QCA::InitializationVector iv = QCA::InitializationVector(256);
-
-    if (!QCA::isSupported("aes256-cbc-pkcs7"))
-    {
-      qDebug() << "Error using aes256";
-      return;
-    }
-
     QMessageEdit *edit = qobject_cast<QMessageEdit*>(sender());
     if(edit == 0)
         return;
@@ -227,32 +231,41 @@ void SIS::transfer()
     QTcpSocket* socket = edit_socket[edit];
     datas conversation = networkMap[socket];
     QMessagesBrowser* browser = conversation.browser;
-    QCA::SymmetricKey key = conversation.key;
 
-    //Encoding with the original key
-    QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, key, iv);
-
+    //Encoding
     QString currText = edit->toPlainText().replace("\n", "<br />");
-    QCA::SecureArray secureData = currText.toUtf8();
-    QCA::SecureArray encryptedData = cipher.process(secureData);
-    if(!cipher.ok())
-    {
-      qDebug() << "Encryption failed!";
-     // return;
-    }
+    QByteArray arr = currText.toUtf8();
+
+    byte iv[AES::BLOCKSIZE];
+    rng.GenerateBlock(iv, AES::BLOCKSIZE);
+
+    CTR_Mode<AES>::Encryption encryption(conversation.key, AES::MAX_KEYLENGTH, iv);
+    StreamTransformationFilter encryptor(encryption, NULL);
+
+    for(int i = 0; i < arr.size(); i++)
+        encryptor.Put((byte)arr.at(i));
+
+    encryptor.MessageEnd();
+    size_t ready = encryptor.MaxRetrievable();
+
+    byte* cipher;
+    cipher = new byte[ready];
+    encryptor.Get(cipher, ready);
 
     QByteArray packet; // packet for sending the public key
     QDataStream out(&packet, QIODevice::WriteOnly);
 
     out << (quint16) 0; // writing 0 while not knowing the size
     out << text;
-    out << encryptedData.toByteArray();
-    out << iv.toByteArray();
+    for(int i=0; i<AES::BLOCKSIZE; i++)
+        out << iv[i];
+    out << (unsigned int)ready;
+    for(unsigned int i=0; i<ready; i++)
+        out << cipher[i];
     out.device()->seek(0);
     out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
     socket->write(packet);
-
 
     QTime time = QDateTime::currentDateTime().time();
     QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
@@ -295,31 +308,94 @@ void SIS::dataReceived()
     int type;
     in >> type;
 
-    QByteArray data;
-    in >> data;
-
-    int tabId = conversation.tabId;
-    QMessagesBrowser* browser = conversation.browser;
-
     conversation.messageSize = 0;
 
-    if(type == givePubK)
+    if(type == text)
     {
-        QString pubKey;
-        char *datas = new char[data.size()];
-        strcpy(datas, data.data());
-        pubKey = datas;
-        delete [] datas;
+        int tabId = conversation.tabId;
+        QMessagesBrowser* browser = conversation.browser;
 
-        Friend contact(QCA::PublicKey::fromPEM(pubKey));
+        if(tabId == -1)
+        {
+            reOpenTab(socket);
+            tabId = conversation.tabId;
+        }
+
+        if(window->currentIndex() != tabId)
+            window->setTabTextColor(tabId, Qt::blue);
+
+      //  QSound receive(qApp->applicationDirPath() + "/sounds/receive.wav");
+        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/ReceiveP.mp3"))->play();
+
+        byte iv[AES::BLOCKSIZE];
+        for(int i=0; i<AES::BLOCKSIZE; i++)
+            in >> iv[i];
+
+        unsigned int ready;
+        in >> ready;
+        byte* cipher;
+        cipher = new byte[ready];
+
+        byte* key = conversation.key;
+
+        CTR_Mode < AES >::Decryption decryption(key, AES::MAX_KEYLENGTH, iv);
+        StreamTransformationFilter decryptor(decryption, NULL);
+
+        for(size_t i = 0; i < ready; i++)
+        {
+            in >> cipher[i];
+            decryptor.Put(cipher[i]);
+        }
+
+        decryptor.MessageEnd();
+        ready = decryptor.MaxRetrievable();
+        byte* plain;
+        plain = new byte[ready];
+        decryptor.Get(plain, ready);
+
+        char* newData;
+        newData = new char[ready];
+        for(unsigned int i=0; i<ready; i++)
+            newData[i] = plain[i];
+
+        QTime time = QDateTime::currentDateTime().time();
+
+        QString t = Qt::escape(QString::fromUtf8(newData, ready)).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
+        t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
+        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + conversation.contact.getNickname() + ": </b></span>" + t);
+    }
+    else if(type == givePubK)
+    {
+        unsigned int length;
+        in >> length;
+
+        string derEncPubKey;
+        for(unsigned int i = 0; i<length; i++)
+        {
+            int tmp;
+            in >> tmp;
+            derEncPubKey.push_back((char)tmp);
+        }
+
+        RSA::PublicKey tmpPubKey;
+        StringSource derEncPubSrc(derEncPubKey, true);
+        tmpPubKey.BERDecode(derEncPubSrc);
+
+        Friend contact(tmpPubKey);
         conversation.contact = contact;
 
-        QByteArray packet; // packet for sending the public key
+        string pubKeyDer;
+        StringSink pubKeyDerSink(pubKeyDer);
+        publicKey.DEREncode(pubKeyDerSink);
+
+        QByteArray packet; // packet for replying the public key
         QDataStream out(&packet, QIODevice::WriteOnly);
 
         out << (quint16) 0; // writing 0 while not knowing the size
         out << replyPubK;
-        out << publicKey.toPEM().toUtf8();
+        out << (unsigned int)pubKeyDer.size();
+        for(unsigned int i=0; i<pubKeyDer.size(); i++)
+            out << pubKeyDer[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -327,99 +403,150 @@ void SIS::dataReceived()
     }
     else if(type == replyPubK)
     {
-        QString pubKey;
-        char *received = new char[data.size()];
-        strcpy(received, data.data());
-        pubKey = received;
+        unsigned int length;
+        in >> length;
 
-        Friend contact(QCA::PublicKey::fromPEM(pubKey));
+        string derEncPubKey;
+        for(unsigned int i = 0; i<length; i++)
+        {
+            int tmp;
+            in >> tmp;
+            derEncPubKey.push_back((char)tmp);
+        }
+
+        RSA::PublicKey tmpPubKey;
+        StringSource derEncPubSrc(derEncPubKey, true);
+        tmpPubKey.BERDecode(derEncPubSrc);
+
+        Friend contact(tmpPubKey);
         conversation.contact = contact;
 
-        delete [] received;
-
-        QByteArray packet; // packet for sending the public key
+        QByteArray packet; // packet for sending the symmetric key
         QDataStream out(&packet, QIODevice::WriteOnly);
 
-        out << (quint16) 0; // writing 0 while not knowing the size
-        out << giveBF;
+
+        string test;
+        StringSink sink(test);
+        conversation.contact.getPubKey().DEREncode(sink);
 
         //Generating a symmetric key
-        QCA::SymmetricKey key = QCA::SymmetricKey(256);
-        conversation.key = key;
+        conversation.key = new byte[AES::MAX_KEYLENGTH];
+        rng.GenerateBlock(conversation.key, AES::MAX_KEYLENGTH);
 
-        QCA::SecureArray keyArr = key.toByteArray();
+        //Encoding it with RSA
 
-        //Encoding it
-        QCA::SecureArray result = conversation.contact.getPubKey().encrypt(keyArr, QCA::EME_PKCS1_OAEP);
+        string plain((char*)conversation.key, AES::MAX_KEYLENGTH), cipher;
+
+        RSAES_OAEP_SHA_Encryptor encryptor(conversation.contact.getPubKey());
+        StringSource(plain, true, new PK_EncryptorFilter(rng, encryptor, new StringSink(cipher)));
 
         //Sending it
-        out << result.toByteArray();
+        out << (quint16) 0; // writing 0 while not knowing the size
+        out << giveAES;
+        out << (unsigned int)cipher.size();
+        for(unsigned int i=0; i<cipher.size(); i++)
+            out << cipher[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
         socket->write(packet);
     }
-    else if(type == giveBF)
+    else if(type == giveAES)
     {
-        QCA::SecureArray result = data;
-        QCA::SecureArray decrypt;
-        if(0 == privateKey.decrypt(result, &decrypt, QCA::EME_PKCS1_OAEP)) {
-            browser->setText("Error decrypting");
-            qDebug() << "Error decrypting";
-            return;
+        unsigned int length;
+        in >> length;
+        string cipher;
+        for(unsigned int i=0; i<length; i++)
+        {
+            int tmp;
+            in >> tmp;
+            cipher.push_back((char)tmp);
         }
+        string plain;
 
-        QCA::SymmetricKey key = decrypt;
-        conversation.key = key;
+        RSAES_OAEP_SHA_Decryptor decryptor(privateKey);
+        StringSource(cipher, true, new PK_DecryptorFilter(rng, decryptor, new StringSink(plain)));
 
-        QByteArray packet; // packet for sending the public key
+        conversation.key = new byte[AES::MAX_KEYLENGTH];
+        for(int i=0; i<AES::MAX_KEYLENGTH; i++)
+            conversation.key[i] = plain[i];
+
+        plain = string((char*)conversation.key, AES::MAX_KEYLENGTH);
+        cipher = "";
+
+        RSAES_OAEP_SHA_Encryptor encryptor(conversation.contact.getPubKey());
+        StringSource(plain, true, new PK_EncryptorFilter(rng, encryptor, new StringSink(cipher)));
+
+        QByteArray packet; // packet for replying the private key
         QDataStream out(&packet, QIODevice::WriteOnly);
 
-        out << (quint16) 0; // writing 0 while not knowing the size
-        out << replyBF;
-
-        //Encoding it back
-        QCA::SecureArray keyArr = key.toByteArray();
-        QCA::SecureArray resultBis = conversation.contact.getPubKey().encrypt(keyArr, QCA::EME_PKCS1_OAEP);
-
         //Sending it
-        out << resultBis.toByteArray();
+        out << (quint16) 0; // writing 0 while not knowing the size
+        out << replyAES;
+        out << (unsigned int)cipher.size();
+        for(unsigned int i=0; i<cipher.size(); i++)
+            out << cipher[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
-
-        socket->write(packet);
     }
-    else if(type == replyBF)
+    else if(type == replyAES)
     {
-        QCA::SecureArray result = data;
-        QCA::SecureArray decrypt;
-        if(0 == privateKey.decrypt(result, &decrypt, QCA::EME_PKCS1_OAEP)) {
-            browser->append("Error decrypting");
-            qDebug() << "Error decrypting";
+        qDebug() << "replyAes";
+        unsigned int length;
+        in >> length;
+        string received;
+        for(unsigned int i=0; i<length; i++)
+        {
+            int tmp;
+            in >> tmp;
+            received.push_back((char)tmp);
+        }
+        string plain;
+
+        RSAES_OAEP_SHA_Decryptor decryptor(privateKey);
+        StringSource(received, true, new PK_DecryptorFilter(rng, decryptor, new StringSink(plain)));
+        bool valid = true;
+        for(int i=0; i<AES::MAX_KEYLENGTH && valid; i++)
+        {
+            if((byte)plain[i] != conversation.key[i])
+                valid = false;
+        }
+
+        if(!valid)
+        {
+            conversation.browser->setText("Invalid key replied");
             return;
         }
 
-        if(decrypt != conversation.key)
-            socket->disconnectFromHost();
+        //Encoding
+        QByteArray arr = nickname.toUtf8();
 
-        QCA::InitializationVector iv = QCA::InitializationVector(256);
-        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, conversation.key, iv);
+        byte iv[AES::BLOCKSIZE];
+        rng.GenerateBlock(iv, AES::BLOCKSIZE);
 
-        QCA::SecureArray secureData = nickname.toUtf8();
-        QCA::SecureArray encryptedData = cipher.process(secureData);
-        if(!cipher.ok())
-        {
-          qDebug() << "Encryption failed!";
-         // return;
-        }
+        CTR_Mode<AES>::Encryption encryption(conversation.key, AES::MAX_KEYLENGTH, iv);
+        StreamTransformationFilter encryptor(encryption, NULL);
 
-        QByteArray packet; // packet for sending the public key
+        for(int i = 0; i < arr.size(); i++)
+            encryptor.Put((byte)arr.at(i));
+
+        encryptor.MessageEnd();
+        size_t ready = encryptor.MaxRetrievable();
+
+        byte* cipher;
+        cipher = new byte[ready];
+        encryptor.Get(cipher, ready);
+
+        QByteArray packet; // packet for sending the nickname
         QDataStream out(&packet, QIODevice::WriteOnly);
 
         out << (quint16) 0; // writing 0 while not knowing the size
         out << giveNick;
-        out << encryptedData.toByteArray();
-        out << iv.toByteArray();
+        for(int i=0; i<AES::BLOCKSIZE; i++)
+            out << iv[i];
+        out << (unsigned int)ready;
+        for(unsigned int i=0; i<ready; i++)
+            out << cipher[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -427,99 +554,106 @@ void SIS::dataReceived()
     }
     else if(type == giveNick)
     {
-        QByteArray initVector;
-        in >> initVector;
-        QCA::InitializationVector iv = initVector;
-        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
-        QCA::SecureArray datas = data;
-        QCA::SecureArray decryptedData = cipher.process(datas);
-        if(!cipher.ok())
-        {
-            qDebug() << "Decryption failed!";
-            browser->append("<b>Decryption failed</b>");
-            return;
-        }
-        conversation.contact.setNickname(QString::fromUtf8(decryptedData.data()));
+        byte iv[AES::BLOCKSIZE];
+        for(int i=0; i<AES::BLOCKSIZE; i++)
+            in >> iv[i];
 
-        iv = QCA::InitializationVector(256);
-        cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Encode, conversation.key, iv);
+        unsigned int ready;
+        in >> ready;
+        byte* cipher;
+        cipher = new byte[ready];
 
-        QCA::SecureArray secureData = nickname.toUtf8();
-        QCA::SecureArray encryptedData = cipher.process(secureData);
-        if(!cipher.ok())
+        byte* key = conversation.key;
+
+        CTR_Mode<AES>::Decryption decryption(key, AES::MAX_KEYLENGTH, iv);
+        StreamTransformationFilter decryptor(decryption, NULL);
+
+        for(size_t i = 0; i < ready; i++)
         {
-          qDebug() << "Encryption failed!";
-         // return;
+            in >> cipher[i];
+            decryptor.Put(cipher[i]);
         }
 
-        QByteArray packet; // packet for sending the public key
+        decryptor.MessageEnd();
+        ready = decryptor.MaxRetrievable();
+        byte* plain;
+        plain = new byte[ready];
+        decryptor.Get(plain, ready);
+
+        char* newData;
+        newData = new char[ready];
+        for(unsigned int i=0; i<ready; i++)
+            newData[i] = plain[i];
+
+        conversation.contact.setNickname(QString::fromUtf8(newData, ready));
+
+        //Encoding
+        QByteArray arr = nickname.toUtf8();
+        rng.GenerateBlock(iv, AES::BLOCKSIZE);
+
+        CTR_Mode<AES>::Encryption encryption(conversation.key, AES::MAX_KEYLENGTH, iv);
+        StreamTransformationFilter encryptor(encryption, NULL);
+
+        for(int i = 0; i < arr.size(); i++)
+            encryptor.Put((byte)arr.at(i));
+
+        encryptor.MessageEnd();
+        ready = encryptor.MaxRetrievable();
+
+        cipher = new byte[ready];
+        encryptor.Get(cipher, ready);
+
+        QByteArray packet; // packet for replying the nickname
         QDataStream out(&packet, QIODevice::WriteOnly);
 
         out << (quint16) 0; // writing 0 while not knowing the size
         out << replyNick;
-        out << encryptedData.toByteArray();
-        out << iv.toByteArray();
+        for(int i=0; i<AES::BLOCKSIZE; i++)
+            out << iv[i];
+        out << (unsigned int)ready;
+        for(unsigned int i=0; i<ready; i++)
+            out << cipher[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
+
+        socket->write(packet);
 
       //  QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
         Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
 
-        socket->write(packet);
     }
     else if(type == replyNick)
     {
-        QByteArray initVector;
-        in >> initVector;
-        QCA::InitializationVector iv = initVector;
-        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
-        QCA::SecureArray datas = data;
-        QCA::SecureArray decryptedData = cipher.process(datas);
-        if(!cipher.ok())
-        {
-            qDebug() << "Decryption failed!";
-            browser->append("<b>Decryption failed</b>");
-            return;
-        }
-        conversation.contact.setNickname(QString::fromUtf8(decryptedData.data()));
-        //QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
-        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
-    }
-    else if(type == text)
-    {
-        if(tabId == -1)
-        {
-            reOpenTab(socket);
-            tabId = conversation.tabId;
-        }
-        if(window->currentIndex() != tabId)
-            window->setTabTextColor(tabId, Qt::blue);
+        byte iv[AES::BLOCKSIZE];
+        for(int i=0; i<AES::BLOCKSIZE; i++)
+            in >> iv[i];
 
-        if (!QCA::isSupported("aes256-cbc-pkcs7"))
+        unsigned int ready;
+        in >> ready;
+        byte* cipher;
+        cipher = new byte[ready];
+
+        CTR_Mode<AES>::Decryption decryption(conversation.key, AES::MAX_KEYLENGTH, iv);
+        StreamTransformationFilter decryptor(decryption, NULL);
+
+        for(size_t i = 0; i < ready; i++)
         {
-          qDebug() << "Error using AES";
-          return;
-        }
-      //  QSound receive(qApp->applicationDirPath() + "/sounds/receive.wav");
-        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/ReceiveP.mp3"))->play();
-        QByteArray initVector;
-        in >> initVector;
-        QCA::InitializationVector iv = initVector;
-        QCA::Cipher cipher = QCA::Cipher("aes256", QCA::Cipher::CBC, QCA::Cipher::DefaultPadding, QCA::Decode, conversation.key, iv);
-        QCA::SecureArray myDatas = data;
-        QCA::SecureArray decryptedData = cipher.process(myDatas);
-        if(!cipher.ok())
-        {
-            qDebug() << "Decryption failed!";
-            browser->append("<b>Decryption failed</b>");
-            return;
+            in >> cipher[i];
+            decryptor.Put(cipher[i]);
         }
 
-        QTime time = QDateTime::currentDateTime().time();
+        decryptor.MessageEnd();
+        ready = decryptor.MaxRetrievable();
+        byte* plain;
+        plain = new byte[ready];
+        decryptor.Get(plain, ready);
 
-        QString t = Qt::escape(QString::fromUtf8(decryptedData.data())).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
-        t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + conversation.contact.getNickname() + ": </b></span>" + t);
+        char* newData;
+        newData = new char[ready];
+        for(unsigned int i=0; i<ready; i++)
+            newData[i] = plain[i];
+
+        conversation.contact.setNickname(QString::fromUtf8(newData, ready));
     }
 }
 
@@ -548,11 +682,17 @@ void SIS::connected()
     QByteArray packet; // packet for sending the public key
     QDataStream out(&packet, QIODevice::WriteOnly);
 
+    string pubKeyDer;
+    StringSink pubKeyDerSink(pubKeyDer);
+    publicKey.DEREncode(pubKeyDerSink);
+
     openTab(socket);
 
     out << (quint16) 0; // writing 0 while not knowing the size
     out << givePubK;
-    out << publicKey.toPEM().toUtf8();
+    out << (unsigned int)pubKeyDer.size();
+    for(unsigned int i=0; i<pubKeyDer.size(); i++)
+        out << pubKeyDer[i];
     out.device()->seek(0);
     out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -566,6 +706,7 @@ void SIS::disconnected()
         return;
 
     socket_edit[socket]->setEnabled(false);
+    socket_edit.erase(socket_edit.find(socket));
 }
 
 void SIS::closeTab(int tab)
