@@ -21,6 +21,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 SIS::SIS(QWidget *parent)
   : QMainWindow(parent)
 {
+    CRYPTO_malloc_init();
+    OPENSSL_add_all_algorithms_conf();
+    ERR_load_crypto_strings();
+
+    ERR_print_errors_fp(stderr);
+
     settings = new QSettings(QSettings::UserScope, qApp->organizationName(), qApp->applicationName());
 
     state = new QMessagesBrowser;
@@ -39,6 +45,7 @@ SIS::SIS(QWidget *parent)
 
     window = new QWindow(this);
     window->setSettings(settings);
+
     connect(window, SIGNAL(tabMoved(int,int)), this, SLOT(moveTab(int,int)));
     connect(window, SIGNAL(tabCloseRequested(int)), this, SLOT(closeTab(int)));
     connect(window, SIGNAL(closed()), this, SLOT(closeAllTabs()));
@@ -49,17 +56,16 @@ SIS::SIS(QWidget *parent)
     timer->start();
 
     QString privateKeyTmp = settings->value("privateKey", "").toString();
+    keys = RSA_new();
+
+   // seed_prng(16);
 
     if(privateKeyTmp.trimmed() == "")
     {
         //Generating the private key
-        InvertibleRSAFunction params;
-        params.GenerateRandomWithKeySize(rng, 4096);
+        keys = RSA_generate_key(4096, RSA_F4, NULL, NULL);
 
-        privateKey = RSA::PrivateKey(params);
-        publicKey = RSA::PublicKey(params);
-
-        if(!privateKey.Validate(rng, 3))
+        if(!RSA_check_key(keys))
         {
             state->setText("Failed to generate secret key");
             qDebug() << "Failed to generate secret key";
@@ -87,46 +93,23 @@ SIS::SIS(QWidget *parent)
         {
             QByteArray passPhrase = passOne.toUtf8();
 
-            string privKeyDer;
-            StringSink privKeyDerSink(privKeyDer);
-            privateKey.DEREncode(privKeyDerSink);
+            FILE* pFile = NULL;
+            pFile = tmpfile();
 
-            QString privKeyQString;
-            for(unsigned int i=0; i<privKeyDer.length(); i++)
-                privKeyQString += QString::number(privKeyDer[i]) + " ";
-            qDebug() << privKeyQString;
+            PEM_write_RSAPrivateKey(pFile, keys, EVP_des_ede3_cbc(), NULL, 0, NULL, passPhrase.data());
 
-            //Hash the pass phrase to create 128 bit key
-            string hashedPass;
-            RIPEMD128 hash;
-            StringSource(string(passPhrase.data()), true, new HashFilter(hash, new StringSink(hashedPass)));
+            QString tmp;
+            rewind(pFile);
 
-            // Generate a random IV
-            byte iv[AES::BLOCKSIZE];
-            rng.GenerateBlock(iv, AES::BLOCKSIZE);
+            char buffer[256];
+            while(!feof(pFile))
+            {
+                if(fgets(buffer, 256, pFile) == NULL)
+                    break;
+                tmp.append(buffer);
+            }
 
-            //Encrypt private key
-            CFB_Mode<AES>::Encryption cfbEncryption((const unsigned char*)hashedPass.c_str(), hashedPass.length(), iv);
-            byte encPrivKey[privKeyDer.length()];
-            cfbEncryption.ProcessData(encPrivKey, (const byte*)privKeyDer.c_str(), privKeyDer.length());
-            string encPrivKeyStr((char *)encPrivKey, privKeyDer.length());
-
-            //Save private key to file
-            string hexEncodedPrivKey;
-            StringSource encPrivKeySrc(encPrivKeyStr, true);
-            HexEncoder sink(new StringSink(hexEncodedPrivKey));
-            encPrivKeySrc.CopyTo(sink);
-            sink.MessageEnd();
-
-            string encIvStr((char *)iv, AES::BLOCKSIZE);
-            string hexEncodedIv;
-            StringSource encIvSrc(encIvStr, true);
-            HexEncoder sinkIv(new StringSink(hexEncodedIv));
-            encIvSrc.CopyTo(sinkIv);
-            sinkIv.MessageEnd();
-
-            settings->setValue("privateKey", QString(hexEncodedPrivKey.c_str()));
-            settings->setValue("privateKeyIV", QString(hexEncodedIv.c_str()));
+            settings->setValue("privateKey", tmp);
         }
         else
         {
@@ -136,53 +119,31 @@ SIS::SIS(QWidget *parent)
     }
     else
     {
-        QString pass = QInputDialog::getText(this, "Sign in", "Enter your password to sign in:", QLineEdit::Password);
+        bool ok;
+        QString pass = QInputDialog::getText(this, "Sign in", "Enter your password to sign in:", QLineEdit::Password, "", &ok);
+        if(!ok)
+        {
+            state->setText("Login operation canceled");
+            return;
+        }
+
+        keys = RSA_new();
 
         QByteArray passPhrase = pass.toUtf8();
+        FILE* pFile;
+        pFile = tmpfile();
+        privateKeyTmp = settings->value("privateKey", "").toString();
 
-        string hexEncodedPrivKey = settings->value("privateKey", "").toString().toStdString();
-        string encPrivKeyStr;
-        StringSource hexDecPrivKeySrc(hexEncodedPrivKey, true);
-        HexDecoder sink(new StringSink(encPrivKeyStr));
-        hexDecPrivKeySrc.CopyTo(sink);
-        sink.MessageEnd();
+        fputs(privateKeyTmp.toUtf8().data(), pFile);
 
-        string hexEncodedIv = settings->value("privateKeyIV", "").toString().toStdString();
-        string sourceIv;
-        StringSource hexDecIvSrc(hexEncodedIv, true);
-        HexDecoder sinkIv(new StringSink(sourceIv));
-        hexDecIvSrc.CopyTo(sinkIv);
-        sinkIv.MessageEnd();
+        rewind(pFile);
 
-        //Hash the pass phrase to create 128 bit key
-        string hashedPass;
-        RIPEMD128 hash;
-        StringSource(string(passPhrase.data()), true, new HashFilter(hash, new StringSink(hashedPass)));
+        PEM_read_RSAPrivateKey(pFile, &keys, NULL, passPhrase.data());
 
-        CFB_Mode<AES>::Decryption cfbDecryption((const unsigned char*)hashedPass.c_str(), hashedPass.length(), (byte*)sourceIv.c_str());
-        byte privKeyDer[encPrivKeyStr.length()];
-        cfbDecryption.ProcessData(privKeyDer, (const byte*)encPrivKeyStr.c_str(), encPrivKeyStr.length());
-        string privKeyDerStr((char *)privKeyDer, encPrivKeyStr.length());
-
-        StringSource privKeyDerSource(privKeyDerStr, true);
-        privateKey.BERDecode(privKeyDerSource);
-
-        publicKey = RSA::PublicKey(privateKey);
-
-        if(!privateKey.Validate(rng, 3))
+        if(!RSA_check_key(keys))
         {
             state->setText("Invalid secret key");
             qDebug() << "Invalid secret key";
-            return;
-        }
-        else
-        {
-            state->setText("Secret key successfully loaded");
-        }
-
-        if(! true )
-        {
-            state->setText("Unable to read key from file");
             return;
         }
     }
@@ -236,32 +197,35 @@ void SIS::transfer()
     QString currText = edit->toPlainText().replace("\n", "<br />");
     QByteArray arr = currText.toUtf8();
 
-    byte iv[AES::BLOCKSIZE];
-    rng.GenerateBlock(iv, AES::BLOCKSIZE);
+    unsigned char iv[16];
+    RAND_bytes(iv, 16);
 
-    CTR_Mode<AES>::Encryption encryption(conversation.key, AES::MAX_KEYLENGTH, iv);
-    StreamTransformationFilter encryptor(encryption, NULL);
+    EVP_CIPHER_CTX *ctx =  new EVP_CIPHER_CTX;
+    EVP_CIPHER_CTX_init(ctx);
+    EVP_EncryptInit(ctx, EVP_aes_256_gcm(), conversation.key, iv);
+    unsigned char *ret;
+    int tmp, ol;
+    ret = new unsigned char[arr.size() + EVP_CIPHER_CTX_block_size(ctx)];
+    EVP_EncryptUpdate(ctx, ret, &tmp, (unsigned char*)arr.data(), arr.size());
+    ol = tmp;
+    EVP_EncryptFinal(ctx, &ret[tmp], &tmp);
+    ol += tmp;
 
-    for(int i = 0; i < arr.size(); i++)
-        encryptor.Put((byte)arr.at(i));
-
-    encryptor.MessageEnd();
-    size_t ready = encryptor.MaxRetrievable();
-
-    byte* cipher;
-    cipher = new byte[ready];
-    encryptor.Get(cipher, ready);
+    unsigned char TAG[16];
+    EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_GET_TAG, 16, TAG);
 
     QByteArray packet; // packet for sending the public key
     QDataStream out(&packet, QIODevice::WriteOnly);
 
     out << (quint16) 0; // writing 0 while not knowing the size
     out << text;
-    for(int i=0; i<AES::BLOCKSIZE; i++)
+    for(int i=0; i<16; i++)
         out << iv[i];
-    out << (unsigned int)ready;
-    for(unsigned int i=0; i<ready; i++)
-        out << cipher[i];
+    for(int i=0; i<16; i++)
+        out << TAG[i];
+    out << ol;
+    for(int i=0; i<ol; i++)
+        out << ret[i];
     out.device()->seek(0);
     out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -270,7 +234,7 @@ void SIS::transfer()
     QTime time = QDateTime::currentDateTime().time();
     QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
     t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-    browser->append("<span style='color:#204a87;' title='" + time.toString() + "'><b>" + nickname + ": </b></span>" + t);
+    browser->append("<span style='color:#204a87;' title='" + QString::number(time.hour()) + "h" + QString::number(time.minute()) + "'><b>" + nickname + ": </b></span>" + t);
     edit->clear();
 }
 
@@ -278,10 +242,10 @@ void SIS::newConversation()
 {
     QTcpSocket* socket = server->nextPendingConnection();
 
+    openTab(socket);
+
     connect(socket, SIGNAL(readyRead()), this, SLOT(dataReceived()));
     connect(socket, SIGNAL(disconnected()), this, SLOT(disconnected()));
-
-    openTab(socket);
 }
 
 void SIS::dataReceived()
@@ -325,77 +289,82 @@ void SIS::dataReceived()
             window->setTabTextColor(tabId, Qt::blue);
 
       //  QSound receive(qApp->applicationDirPath() + "/sounds/receive.wav");
-        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/ReceiveP.mp3"))->play();
 
-        byte iv[AES::BLOCKSIZE];
-        for(int i=0; i<AES::BLOCKSIZE; i++)
+        //Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/ReceiveP.mp3"))->play();
+
+        unsigned char iv[16];
+        for(int i=0; i<16; i++)
             in >> iv[i];
 
-        unsigned int ready;
-        in >> ready;
-        byte* cipher;
-        cipher = new byte[ready];
+        unsigned char TAG[16];
+        for(int i=0; i<16; i++)
+            in >> TAG[i];
 
-        byte* key = conversation.key;
-
-        CTR_Mode < AES >::Decryption decryption(key, AES::MAX_KEYLENGTH, iv);
-        StreamTransformationFilter decryptor(decryption, NULL);
-
-        for(size_t i = 0; i < ready; i++)
-        {
+        int ol;
+        in >> ol;
+        unsigned char* cipher;
+        cipher = new unsigned char[ol];
+        for(int i=0; i<ol; i++)
             in >> cipher[i];
-            decryptor.Put(cipher[i]);
-        }
 
-        decryptor.MessageEnd();
-        ready = decryptor.MaxRetrievable();
-        byte* plain;
-        plain = new byte[ready];
-        decryptor.Get(plain, ready);
-
-        char* newData;
-        newData = new char[ready];
-        for(unsigned int i=0; i<ready; i++)
-            newData[i] = plain[i];
+        EVP_CIPHER_CTX *ctx =  new EVP_CIPHER_CTX;
+        EVP_CIPHER_CTX_init(ctx);
+        EVP_DecryptInit(ctx, EVP_aes_256_gcm(), conversation.key, iv);
+        EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_SET_TAG, 16, TAG);
+        unsigned char *ret;
+        int tmp;
+        ret = new unsigned char[ol + EVP_CIPHER_CTX_block_size(ctx)];
+        EVP_DecryptUpdate(ctx, ret, &tmp, cipher, ol);
+        ol = tmp;
+        if(!EVP_DecryptFinal(ctx, &ret[tmp], &tmp))
+            return;
+        ol += tmp;
 
         QTime time = QDateTime::currentDateTime().time();
 
-        QString t = Qt::escape(QString::fromUtf8(newData, ready)).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
+        QString t = Qt::escape(QString::fromUtf8((char*)ret, ol)).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
         t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
         browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + conversation.contact.getNickname() + ": </b></span>" + t);
     }
     else if(type == givePubK)
     {
-        unsigned int length;
-        in >> length;
+        QString tmp;
+        in >> tmp;
 
-        string derEncPubKey;
-        for(unsigned int i = 0; i<length; i++)
-        {
-            int tmp;
-            in >> tmp;
-            derEncPubKey.push_back((char)tmp);
-        }
+        FILE* pFile;
+        pFile = tmpfile();
 
-        RSA::PublicKey tmpPubKey;
-        StringSource derEncPubSrc(derEncPubKey, true);
-        tmpPubKey.BERDecode(derEncPubSrc);
+        fputs(tmp.toStdString().c_str(), pFile);
+        rewind(pFile);
 
-        Friend contact(tmpPubKey);
+        RSA* friendKey = RSA_new();
+        PEM_read_RSAPublicKey(pFile, &friendKey, NULL, NULL);
+
+        Friend contact(friendKey);
         conversation.contact = contact;
+        fclose(pFile);
 
-        string pubKeyDer;
-        StringSink pubKeyDerSink(pubKeyDer);
-        publicKey.DEREncode(pubKeyDerSink);
+        pFile = tmpfile();
+
+        PEM_write_RSAPublicKey(pFile, keys);
+
+        tmp = "";
+        rewind(pFile);
+
+        char buffer[256];
+        while(!feof(pFile))
+        {
+            if(fgets(buffer, 256, pFile) == NULL)
+                break;
+            tmp.append(buffer);
+        }
 
         QByteArray packet; // packet for replying the public key
         QDataStream out(&packet, QIODevice::WriteOnly);
 
         out << (quint16) 0; // writing 0 while not knowing the size
         out << replyPubK;
-        out << (unsigned int)pubKeyDer.size();
-        for(unsigned int i=0; i<pubKeyDer.size(); i++)
-            out << pubKeyDer[i];
+        out << tmp;
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -403,79 +372,57 @@ void SIS::dataReceived()
     }
     else if(type == replyPubK)
     {
-        unsigned int length;
-        in >> length;
+        QString tmp;
+        in >> tmp;
 
-        string derEncPubKey;
-        for(unsigned int i = 0; i<length; i++)
-        {
-            int tmp;
-            in >> tmp;
-            derEncPubKey.push_back((char)tmp);
-        }
+        FILE* pFile;
+        pFile = tmpfile();
 
-        RSA::PublicKey tmpPubKey;
-        StringSource derEncPubSrc(derEncPubKey, true);
-        tmpPubKey.BERDecode(derEncPubSrc);
+        fputs(tmp.toStdString().c_str(), pFile);
+        rewind(pFile);
 
-        Friend contact(tmpPubKey);
+        RSA* friendKey = RSA_new();
+        PEM_read_RSAPublicKey(pFile, &friendKey, NULL, NULL);
+
+        Friend contact(friendKey);
         conversation.contact = contact;
 
-        QByteArray packet; // packet for sending the symmetric key
-        QDataStream out(&packet, QIODevice::WriteOnly);
-
-
-        string test;
-        StringSink sink(test);
-        conversation.contact.getPubKey().DEREncode(sink);
-
         //Generating a symmetric key
-        conversation.key = new byte[AES::MAX_KEYLENGTH];
-        rng.GenerateBlock(conversation.key, AES::MAX_KEYLENGTH);
+        conversation.key = new unsigned char[32];
+        RAND_bytes(conversation.key, 32);
 
         //Encoding it with RSA
-
-        string plain((char*)conversation.key, AES::MAX_KEYLENGTH), cipher;
-
-        RSAES_OAEP_SHA_Encryptor encryptor(conversation.contact.getPubKey());
-        StringSource(plain, true, new PK_EncryptorFilter(rng, encryptor, new StringSink(cipher)));
+        const int size = RSA_size(conversation.contact.getPubKey());
+        unsigned char* to = NULL;
+        to = new unsigned char[size];
+        RSA_public_encrypt(32, conversation.key, to, conversation.contact.getPubKey(), RSA_PKCS1_OAEP_PADDING);
 
         //Sending it
+        QByteArray packet; // packet for sending the symmetric key
+        QDataStream out(&packet, QIODevice::WriteOnly);
         out << (quint16) 0; // writing 0 while not knowing the size
         out << giveAES;
-        out << (unsigned int)cipher.size();
-        for(unsigned int i=0; i<cipher.size(); i++)
-            out << cipher[i];
+        for(int i=0; i<size; i++)
+            out << to[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
-
         socket->write(packet);
     }
     else if(type == giveAES)
     {
-        unsigned int length;
-        in >> length;
-        string cipher;
-        for(unsigned int i=0; i<length; i++)
-        {
-            int tmp;
-            in >> tmp;
-            cipher.push_back((char)tmp);
-        }
-        string plain;
+        const int mySize = RSA_size(keys);
+        unsigned char* from = NULL;
+        from = new unsigned char[mySize];
+        for(int i=0; i<mySize; i++)
+            in >> from[i];
 
-        RSAES_OAEP_SHA_Decryptor decryptor(privateKey);
-        StringSource(cipher, true, new PK_DecryptorFilter(rng, decryptor, new StringSink(plain)));
+        conversation.key = new unsigned char[32];
+        RSA_private_decrypt(mySize, from, conversation.key, keys, RSA_PKCS1_OAEP_PADDING);
 
-        conversation.key = new byte[AES::MAX_KEYLENGTH];
-        for(int i=0; i<AES::MAX_KEYLENGTH; i++)
-            conversation.key[i] = plain[i];
-
-        plain = string((char*)conversation.key, AES::MAX_KEYLENGTH);
-        cipher = "";
-
-        RSAES_OAEP_SHA_Encryptor encryptor(conversation.contact.getPubKey());
-        StringSource(plain, true, new PK_EncryptorFilter(rng, encryptor, new StringSink(cipher)));
+        const int size = RSA_size(conversation.contact.getPubKey());
+        unsigned char* to = NULL;
+        to = new unsigned char[size];
+        RSA_public_encrypt(32, conversation.key, to, conversation.contact.getPubKey(), RSA_PKCS1_OAEP_PADDING);
 
         QByteArray packet; // packet for replying the private key
         QDataStream out(&packet, QIODevice::WriteOnly);
@@ -483,70 +430,70 @@ void SIS::dataReceived()
         //Sending it
         out << (quint16) 0; // writing 0 while not knowing the size
         out << replyAES;
-        out << (unsigned int)cipher.size();
-        for(unsigned int i=0; i<cipher.size(); i++)
-            out << cipher[i];
+        for(int i=0; i<size; i++)
+            out << to[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
+
+        socket->write(packet);
     }
     else if(type == replyAES)
     {
-        qDebug() << "replyAes";
-        unsigned int length;
-        in >> length;
-        string received;
-        for(unsigned int i=0; i<length; i++)
-        {
-            int tmp;
-            in >> tmp;
-            received.push_back((char)tmp);
-        }
-        string plain;
+        const int mySize = RSA_size(keys);
+        unsigned char* from = NULL;
+        from = new unsigned char[mySize];
+        for(int i=0; i<mySize; i++)
+            in >> from[i];
 
-        RSAES_OAEP_SHA_Decryptor decryptor(privateKey);
-        StringSource(received, true, new PK_DecryptorFilter(rng, decryptor, new StringSink(plain)));
+        unsigned char to[32];
+        RSA_private_decrypt(mySize, from, to, keys, RSA_PKCS1_OAEP_PADDING);
+
+
         bool valid = true;
-        for(int i=0; i<AES::MAX_KEYLENGTH && valid; i++)
+        for(int i=0; i<32 && valid; i++)
         {
-            if((byte)plain[i] != conversation.key[i])
+            if(to[i] != conversation.key[i])
                 valid = false;
         }
 
         if(!valid)
         {
-            conversation.browser->setText("Invalid key replied");
+            conversation.browser->setText("Invalid key replied"); // This should close the conversation
             return;
         }
 
         //Encoding
         QByteArray arr = nickname.toUtf8();
 
-        byte iv[AES::BLOCKSIZE];
-        rng.GenerateBlock(iv, AES::BLOCKSIZE);
+        unsigned char iv[16];
+        RAND_bytes(iv, 16);
 
-        CTR_Mode<AES>::Encryption encryption(conversation.key, AES::MAX_KEYLENGTH, iv);
-        StreamTransformationFilter encryptor(encryption, NULL);
+        EVP_CIPHER_CTX *ctx =  new EVP_CIPHER_CTX;
+        EVP_CIPHER_CTX_init(ctx);
+        EVP_EncryptInit(ctx, EVP_aes_256_gcm(), conversation.key, iv);
+        unsigned char *ret;
+        int tmp, ol;
+        ret = new unsigned char[arr.size() + EVP_CIPHER_CTX_block_size(ctx)];
+        EVP_EncryptUpdate(ctx, ret, &tmp, (unsigned char*)arr.data(), arr.size());
+        ol = tmp;
+        EVP_EncryptFinal(ctx, &ret[tmp], &tmp);
+        ol += tmp;
 
-        for(int i = 0; i < arr.size(); i++)
-            encryptor.Put((byte)arr.at(i));
+        unsigned char TAG[16];
+        EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_GET_TAG, 16, TAG);
 
-        encryptor.MessageEnd();
-        size_t ready = encryptor.MaxRetrievable();
-
-        byte* cipher;
-        cipher = new byte[ready];
-        encryptor.Get(cipher, ready);
-
-        QByteArray packet; // packet for sending the nickname
+        QByteArray packet; // packet for sending the public key
         QDataStream out(&packet, QIODevice::WriteOnly);
 
         out << (quint16) 0; // writing 0 while not knowing the size
         out << giveNick;
-        for(int i=0; i<AES::BLOCKSIZE; i++)
+        for(int i=0; i<16; i++)
             out << iv[i];
-        out << (unsigned int)ready;
-        for(unsigned int i=0; i<ready; i++)
-            out << cipher[i];
+        for(int i=0; i<16; i++)
+            out << TAG[i];
+        out << ol;
+        for(int i=0; i<ol; i++)
+            out << ret[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -554,106 +501,104 @@ void SIS::dataReceived()
     }
     else if(type == giveNick)
     {
-        byte iv[AES::BLOCKSIZE];
-        for(int i=0; i<AES::BLOCKSIZE; i++)
+        unsigned char iv[16];
+        for(int i=0; i<16; i++)
             in >> iv[i];
 
-        unsigned int ready;
-        in >> ready;
-        byte* cipher;
-        cipher = new byte[ready];
+        unsigned char TAG[16];
+        for(int i=0; i<16; i++)
+            in >> TAG[i];
 
-        byte* key = conversation.key;
-
-        CTR_Mode<AES>::Decryption decryption(key, AES::MAX_KEYLENGTH, iv);
-        StreamTransformationFilter decryptor(decryption, NULL);
-
-        for(size_t i = 0; i < ready; i++)
-        {
+        int ol;
+        in >> ol;
+        unsigned char* cipher;
+        cipher = new unsigned char[ol];
+        for(int i=0; i<ol; i++)
             in >> cipher[i];
-            decryptor.Put(cipher[i]);
-        }
 
-        decryptor.MessageEnd();
-        ready = decryptor.MaxRetrievable();
-        byte* plain;
-        plain = new byte[ready];
-        decryptor.Get(plain, ready);
+        EVP_CIPHER_CTX *ctx =  new EVP_CIPHER_CTX;
+        EVP_CIPHER_CTX_init(ctx);
+        EVP_DecryptInit(ctx, EVP_aes_256_gcm(), conversation.key, iv);
+        EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_SET_TAG, 16, TAG);
+        unsigned char *ret;
+        int tmp;
+        ret = new unsigned char[ol + EVP_CIPHER_CTX_block_size(ctx)];
+        EVP_DecryptUpdate(ctx, ret, &tmp, cipher, ol);
+        ol = tmp;
+        if(!EVP_DecryptFinal(ctx, &ret[tmp], &tmp))
+            return;
+        ol += tmp;
 
-        char* newData;
-        newData = new char[ready];
-        for(unsigned int i=0; i<ready; i++)
-            newData[i] = plain[i];
-
-        conversation.contact.setNickname(QString::fromUtf8(newData, ready));
+        conversation.contact.setNickname(QString::fromUtf8((char*)ret, ol));
 
         //Encoding
         QByteArray arr = nickname.toUtf8();
-        rng.GenerateBlock(iv, AES::BLOCKSIZE);
 
-        CTR_Mode<AES>::Encryption encryption(conversation.key, AES::MAX_KEYLENGTH, iv);
-        StreamTransformationFilter encryptor(encryption, NULL);
+        RAND_bytes(iv, 16);
 
-        for(int i = 0; i < arr.size(); i++)
-            encryptor.Put((byte)arr.at(i));
+        ctx =  new EVP_CIPHER_CTX;
+        EVP_CIPHER_CTX_init(ctx);
+        EVP_EncryptInit(ctx, EVP_aes_256_gcm(), conversation.key, iv);
+        ret = new unsigned char[arr.size() + EVP_CIPHER_CTX_block_size(ctx)];
+        EVP_EncryptUpdate(ctx, ret, &tmp, (unsigned char*)arr.data(), arr.size());
+        ol = tmp;
+        EVP_EncryptFinal(ctx, &ret[tmp], &tmp);
+        ol += tmp;
 
-        encryptor.MessageEnd();
-        ready = encryptor.MaxRetrievable();
+        EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_GET_TAG, 16, TAG);
 
-        cipher = new byte[ready];
-        encryptor.Get(cipher, ready);
-
-        QByteArray packet; // packet for replying the nickname
+        QByteArray packet; // packet for sending the public key
         QDataStream out(&packet, QIODevice::WriteOnly);
 
         out << (quint16) 0; // writing 0 while not knowing the size
         out << replyNick;
-        for(int i=0; i<AES::BLOCKSIZE; i++)
+        for(int i=0; i<16; i++)
             out << iv[i];
-        out << (unsigned int)ready;
-        for(unsigned int i=0; i<ready; i++)
-            out << cipher[i];
+        for(int i=0; i<16; i++)
+            out << TAG[i];
+        out << ol;
+        for(int i=0; i<ol; i++)
+            out << ret[i];
         out.device()->seek(0);
         out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
         socket->write(packet);
 
       //  QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
-        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
+       // Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/LoginP.mp3"))->play();
 
     }
     else if(type == replyNick)
     {
-        byte iv[AES::BLOCKSIZE];
-        for(int i=0; i<AES::BLOCKSIZE; i++)
+        unsigned char iv[16];
+        for(int i=0; i<16; i++)
             in >> iv[i];
 
-        unsigned int ready;
-        in >> ready;
-        byte* cipher;
-        cipher = new byte[ready];
+        unsigned char TAG[16];
+        for(int i=0; i<16; i++)
+            in >> TAG[i];
 
-        CTR_Mode<AES>::Decryption decryption(conversation.key, AES::MAX_KEYLENGTH, iv);
-        StreamTransformationFilter decryptor(decryption, NULL);
-
-        for(size_t i = 0; i < ready; i++)
-        {
+        int ol;
+        in >> ol;
+        unsigned char* cipher;
+        cipher = new unsigned char[ol];
+        for(int i=0; i<ol; i++)
             in >> cipher[i];
-            decryptor.Put(cipher[i]);
-        }
 
-        decryptor.MessageEnd();
-        ready = decryptor.MaxRetrievable();
-        byte* plain;
-        plain = new byte[ready];
-        decryptor.Get(plain, ready);
+        EVP_CIPHER_CTX *ctx =  new EVP_CIPHER_CTX;
+        EVP_CIPHER_CTX_init(ctx);
+        EVP_DecryptInit(ctx, EVP_aes_256_gcm(), conversation.key, iv);
+        EVP_CIPHER_CTX_ctrl (ctx, EVP_CTRL_GCM_SET_TAG, 16, TAG);
+        unsigned char *ret;
+        int tmp;
+        ret = new unsigned char[ol + EVP_CIPHER_CTX_block_size(ctx)];
+        EVP_DecryptUpdate(ctx, ret, &tmp, cipher, ol);
+        ol = tmp;
+        if(!EVP_DecryptFinal(ctx, &ret[tmp], &tmp))
+            return;
+        ol += tmp;
 
-        char* newData;
-        newData = new char[ready];
-        for(unsigned int i=0; i<ready; i++)
-            newData[i] = plain[i];
-
-        conversation.contact.setNickname(QString::fromUtf8(newData, ready));
+        conversation.contact.setNickname(QString::fromUtf8((char*)ret, ol));
     }
 }
 
@@ -682,17 +627,27 @@ void SIS::connected()
     QByteArray packet; // packet for sending the public key
     QDataStream out(&packet, QIODevice::WriteOnly);
 
-    string pubKeyDer;
-    StringSink pubKeyDerSink(pubKeyDer);
-    publicKey.DEREncode(pubKeyDerSink);
+    FILE* pFile = NULL;
+    pFile = tmpfile();
+
+    PEM_write_RSAPublicKey(pFile, keys);
+
+    QString tmp;
+    rewind(pFile);
+
+    char buffer[256];
+    while(!feof(pFile))
+    {
+        if(fgets(buffer, 256, pFile) == NULL)
+            break;
+        tmp.append(buffer);
+    }
 
     openTab(socket);
 
     out << (quint16) 0; // writing 0 while not knowing the size
     out << givePubK;
-    out << (unsigned int)pubKeyDer.size();
-    for(unsigned int i=0; i<pubKeyDer.size(); i++)
-        out << pubKeyDer[i];
+    out << tmp;
     out.device()->seek(0);
     out << (quint16) (packet.size() - sizeof(quint16)); // overwriting the 0 by the real size
 
@@ -815,3 +770,11 @@ void SIS::moveTab(int from, int to)
     tabMap[from] = tabMap[to];
     tabMap[to] = dataFrom;
 }
+
+int SIS::seed_prng(int bytes)
+{
+    if (!RAND_load_file("/dev/random", bytes))
+        return 0;
+    return 1;
+}
+

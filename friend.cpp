@@ -5,13 +5,13 @@ Friend::Friend()
     nickname = "Other";
 }
 
-Friend::Friend(RSA::PublicKey key)
+Friend::Friend(RSA* key)
     : pubKey(key)
 {
     nickname = "Other";
 }
 
-RSA::PublicKey Friend::getPubKey()
+RSA* Friend::getPubKey()
 {
     return pubKey;
 }

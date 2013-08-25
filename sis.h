@@ -23,13 +23,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <QtNetwork>
 #include <phonon/phonon>
 
-#include <cryptopp/modes.h>
-#include <cryptopp/aes.h>
-#include <cryptopp/filters.h>
-#include <cryptopp/osrng.h>
-#include <cryptopp/rsa.h>
-#include <cryptopp/ripemd.h>
-#include <cryptopp/hex.h>
+#include <openssl/conf.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/aes.h>
+#include <openssl/rand.h>
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/bio.h>
 
 #include <map>
 #include "friend.h"
@@ -38,13 +39,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "qwindow.h"
 
 using namespace std;
-using namespace CryptoPP;
 
 struct datas {
     int tabId;
     QWidget* container;
     QMessagesBrowser* browser;
-    byte* key;
+    unsigned char* key;
     Friend contact;
     quint16 messageSize;
 };
@@ -70,10 +70,7 @@ private:
   QSettings* settings;
   QString nickname;
 
-  RSA::PrivateKey privateKey;
-  RSA::PublicKey publicKey;
-
-  AutoSeededRandomPool rng;
+  RSA* keys;
 
   QTcpServer* server;
   int port;
@@ -84,8 +81,10 @@ private:
   map<QTcpSocket*, datas> networkMap;
   map<int, pair<QMessageEdit*, QTcpSocket*> > tabMap;
 
+  int seed_prng(int);
   void openTab(QTcpSocket* socket);
   void reOpenTab(QTcpSocket* socket);
+
 
 private slots:
   void transfer();

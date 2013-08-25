@@ -2,21 +2,19 @@
 #define FRIEND_H
 
 #include <QString>
-#include <cryptopp/rsa.h>
-
-using namespace CryptoPP;
+#include <openssl/rsa.h>
 
 class Friend
 {
 public:
     Friend();
-    Friend(RSA::PublicKey);
-    RSA::PublicKey getPubKey();
+    Friend(RSA*);
+    RSA* getPubKey();
     void setNickname(QString name);
     QString getNickname();
 
 private:
-    RSA::PublicKey pubKey;
+    RSA* pubKey;
     QString nickname;
 };
 

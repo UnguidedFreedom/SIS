@@ -6,7 +6,8 @@
 
 QT       += core gui network phonon
 
-LIBS += -lcryptopp
+LIBS += -lssl
+LIBS += -lcrypto
 
 TARGET = SIS
 TEMPLATE = app
