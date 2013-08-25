@@ -25,8 +25,16 @@ int main(int argc, char *argv[])
 {
   QApplication a(argc, argv);
 
+  qRegisterMetaType<Friend>("Friend");
+
   QCoreApplication::setOrganizationName("CamelCorp");
   QCoreApplication::setApplicationName("SIS");
+
+
+  QTranslator qtTranslator;
+  qtTranslator.load("qt_" + QLocale::system().name(),
+          QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+  a.installTranslator(&qtTranslator);
 
   SIS w;
   w.show();

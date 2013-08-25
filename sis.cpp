@@ -31,7 +31,7 @@ SIS::SIS(QWidget *parent)
 
     state = new QMessagesBrowser;
 
-    button = new QPushButton("Connect to host");
+    button = new QPushButton(tr("Connect to host"));
     connect(button, SIGNAL(pressed()), this, SLOT(requestNewConnection()));
     button->setEnabled(false);
 
@@ -41,7 +41,7 @@ SIS::SIS(QWidget *parent)
     layout->addWidget(state);
     container->setLayout(layout);
     setCentralWidget(container);
-    setWindowTitle("SIS Messaging");
+    setWindowTitle(tr("SIS Messaging"));
 
     window = new QWindow(this);
     window->setSettings(settings);
@@ -67,7 +67,7 @@ SIS::SIS(QWidget *parent)
 
         if(!RSA_check_key(keys))
         {
-            state->setText("Failed to generate secret key");
+            state->setText(tr("Failed to generate secret key"));
             qDebug() << "Failed to generate secret key";
             return;
         }
@@ -77,16 +77,16 @@ SIS::SIS(QWidget *parent)
         QString passOne, passTwo;
         do {
             bool ok;
-            passOne = QInputDialog::getText(this, "Sign up", "Enter your password to sign up:", QLineEdit::Password, "", &ok);
+            passOne = QInputDialog::getText(this, tr("Sign up"), tr("Enter your password to sign up:"), QLineEdit::Password, "", &ok);
             if(!ok)
             {
                 state->setText("No password given");
                 return;
             }
-            passTwo = QInputDialog::getText(this, "Sign up", "Confirm your password to sign up:", QLineEdit::Password, "", &ok);
+            passTwo = QInputDialog::getText(this, tr("Sign up"), tr("Confirm your password to sign up:"), QLineEdit::Password, "", &ok);
             if(!ok)
             {
-                state->setText("No password given");
+                state->setText(tr("No password given"));
                 return;
             }
         } while(passOne != passTwo || passOne.trimmed().size() == 0);
@@ -115,17 +115,17 @@ SIS::SIS(QWidget *parent)
         }
         else
         {
-            state->setText("No password given");
+            state->setText(tr("No password given"));
             return;
         }
     }
     else
     {
         bool ok;
-        QString pass = QInputDialog::getText(this, "Sign in", "Enter your password to sign in:", QLineEdit::Password, "", &ok);
+        QString pass = QInputDialog::getText(this, tr("Sign in"), tr("Enter your password to sign in:"), QLineEdit::Password, "", &ok);
         if(!ok)
         {
-            state->setText("Login operation canceled");
+            state->setText(tr("Login operation canceled"));
             return;
         }
 
@@ -140,12 +140,16 @@ SIS::SIS(QWidget *parent)
 
         rewind(pFile);
 
-        PEM_read_RSAPrivateKey(pFile, &keys, NULL, passPhrase.data());
+        if(PEM_read_RSAPrivateKey(pFile, &keys, NULL, passPhrase.data())==0)
+        {
+            state->setText(tr("Wrong password given"));
+            return;
+        }
 
         if(!RSA_check_key(keys))
         {
-            state->setText("Invalid secret key");
-            qDebug() << "Invalid secret key";
+            state->setText(tr("Invalid secret key"));
+            qDebug() << tr("Invalid secret key");
             return;
         }
 
@@ -157,10 +161,10 @@ SIS::SIS(QWidget *parent)
     while(nickname.trimmed() == "")
     {
         bool ok;
-        nickname = QInputDialog::getText(this, "Pick a nickname", "Enter your nickname:", QLineEdit::Normal, "", &ok);
+        nickname = QInputDialog::getText(this, tr("Pick a nickname"), tr("Enter your nickname:"), QLineEdit::Normal, "", &ok);
         if(!ok)
         {
-            state->setText("No nickname given");
+            state->setText(tr("No nickname given"));
             return;
         }
     }
@@ -176,11 +180,11 @@ SIS::SIS(QWidget *parent)
         qDebug() << "No valid port available";
         return;
     }
-    state->append("Now listening on port " + QString::number(port));
+    state->append(tr("Now listening on port ") + QString::number(port));
 
     connect(server, SIGNAL(newConnection()), this, SLOT(newConversation()));
 
-    state->append(QString::number(timer->elapsed()) + " ms to launch program");
+    state->append(QString::number(timer->elapsed()) + tr(" ms to launch program"));
     button->setEnabled(true);
 }
 
@@ -467,7 +471,7 @@ void SIS::dataReceived()
 
         if(!valid)
         {
-            conversation.browser->setText("Invalid key replied"); // This should close the conversation
+            conversation.browser->setText(tr("Invalid key replied")); // This should close the conversation
             return;
         }
 
@@ -619,7 +623,7 @@ void SIS::dataReceived()
 void SIS::requestNewConnection()
 {
     bool ok;
-    QString ip = QInputDialog::getText(this, "IP address", "Enter the IP address (IP:port) to which you want to connect:", QLineEdit::Normal, settings->value("lastIP", "").toString(), &ok);
+    QString ip = QInputDialog::getText(this, tr("IP address"), tr("Enter the IP address (IP:port) to which you want to connect:"), QLineEdit::Normal, settings->value("lastIP", "").toString(), &ok);
     if(!ok)
         return;
     settings->setValue("lastIP", ip);
