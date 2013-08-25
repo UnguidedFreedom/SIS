@@ -290,7 +290,12 @@ void SIS::dataReceived()
 
       //  QSound receive(qApp->applicationDirPath() + "/sounds/receive.wav");
 
-        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Receive.mp3"))->play();
+        Phonon::MediaObject *mediaObject = new Phonon::MediaObject(this);
+        mediaObject->setCurrentSource(Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Receive.mp3"));
+        Phonon::AudioOutput *audioOutput = new Phonon::AudioOutput(Phonon::MusicCategory, this);
+        audioOutput->setVolume(0.75);
+        Phonon::createPath(mediaObject, audioOutput);
+        mediaObject->play();
 
         unsigned char iv[16];
         for(int i=0; i<16; i++)
@@ -565,7 +570,12 @@ void SIS::dataReceived()
         socket->write(packet);
 
       //  QSound::play(qApp->applicationDirPath() + "/sounds/login.wav");
-        Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Login.mp3"))->play();
+        Phonon::MediaObject *mediaObject = new Phonon::MediaObject(this);
+        mediaObject->setCurrentSource(Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Login.mp3"));
+        Phonon::AudioOutput *audioOutput = new Phonon::AudioOutput(Phonon::MusicCategory, this);
+        audioOutput->setVolume(0.75);
+        Phonon::createPath(mediaObject, audioOutput);
+        mediaObject->play();
 
     }
     else if(type == replyNick)
@@ -663,7 +673,12 @@ void SIS::disconnected()
     socket_edit[socket]->setEnabled(false);
     socket_edit.erase(socket_edit.find(socket));
 
-    Phonon::createPlayer(Phonon::NoCategory, Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Logout.mp3"))->play();
+    Phonon::MediaObject *mediaObject = new Phonon::MediaObject(this);
+    mediaObject->setCurrentSource(Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Logout.mp3"));
+    Phonon::AudioOutput *audioOutput = new Phonon::AudioOutput(Phonon::MusicCategory, this);
+    audioOutput->setVolume(0.75);
+    Phonon::createPath(mediaObject, audioOutput);
+    mediaObject->play();
 }
 
 void SIS::closeTab(int tab)
