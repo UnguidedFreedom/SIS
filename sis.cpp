@@ -234,7 +234,7 @@ void SIS::transfer()
     QTime time = QDateTime::currentDateTime().time();
     QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
     t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-    browser->append("<span style='color:#204a87;' title='" + QString::number(time.hour()) + "h" + QString::number(time.minute()) + "'><b>" + nickname + ": </b></span>" + t);
+    browser->append("<span style='color:#204a87;' title='" + QString::number(time.hour()) + "h" + (time.minute()<10 ? "0" : "") + QString::number(time.minute()) + "'><b>" + nickname + ": </b></span>" + t);
     edit->clear();
 }
 
@@ -324,7 +324,7 @@ void SIS::dataReceived()
 
         QString t = Qt::escape(QString::fromUtf8((char*)ret, ol)).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
         t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
-        browser->append("<span style='color:#cc0000;' title='" + time.toString() + "'><b>" + conversation.contact.getNickname() + ": </b></span>" + t);
+        browser->append("<span style='color:#cc0000;' title='" + QString::number(time.hour()) + "h" + (time.minute()<10 ? "0" : "") + QString::number(time.minute()) + "'><b>" + conversation.contact.getNickname() + ": </b></span>" + t);
     }
     else if(type == givePubK)
     {
