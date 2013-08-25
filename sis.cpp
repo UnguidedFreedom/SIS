@@ -72,6 +72,8 @@ SIS::SIS(QWidget *parent)
             return;
         }
 
+        RSA_blinding_on(keys, NULL);
+
         QString passOne, passTwo;
         do {
             bool ok;
@@ -146,6 +148,8 @@ SIS::SIS(QWidget *parent)
             qDebug() << "Invalid secret key";
             return;
         }
+
+        RSA_blinding_on(keys, NULL);
     }
 
     nickname = settings->value("nickname", "").toString();
