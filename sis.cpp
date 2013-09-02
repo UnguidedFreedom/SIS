@@ -239,6 +239,13 @@ void SIS::transfer()
 
     socket->write(packet);
 
+    Phonon::MediaObject *mediaObject = new Phonon::MediaObject(this);
+    mediaObject->setCurrentSource(Phonon::MediaSource(qApp->applicationDirPath() + "/sounds/Send.mp3"));
+    Phonon::AudioOutput *audioOutput = new Phonon::AudioOutput(Phonon::MusicCategory, this);
+    audioOutput->setVolume(0.75);
+    Phonon::createPath(mediaObject, audioOutput);
+    mediaObject->play();
+
     QTime time = QDateTime::currentDateTime().time();
     QString t = Qt::escape(currText).replace("&lt;br /&gt;", "<br />").replace("&amp;", "&");
     t.replace(QRegExp("((ftp|https?):\\/\\/[a-zA-Z0-9\\.\\-\\/\\:\\_\\%\\?\\&\\=\\+\\#]+)"), "<a href='\\1'>\\1</a>");
