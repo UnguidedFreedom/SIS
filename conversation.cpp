@@ -1,6 +1,6 @@
-#include "qwindow.h"
+#include "conversation.h"
 
-QWindow::QWindow(QWidget *parent) :
+Conversation::Conversation(QWidget *parent) :
     QMainWindow(parent)
 {
     tabs = 0;
@@ -26,17 +26,17 @@ QWindow::QWindow(QWidget *parent) :
     setCentralWidget(container);
 }
 
-int QWindow::currentIndex()
+int Conversation::currentIndex()
 {
     return tabBar->currentIndex();
 }
 
-void QWindow::setTabTextColor(int tab, QColor color)
+void Conversation::setTabTextColor(int tab, QColor color)
 {
     tabBar->setTabTextColor(tab, color);
 }
 
-int QWindow::addTab(QWidget* widget, QString string)
+int Conversation::addTab(QWidget* widget, QString string)
 {
     tabs++;
     int current = conversations->addWidget(widget);
@@ -45,7 +45,7 @@ int QWindow::addTab(QWidget* widget, QString string)
     return value;
 }
 
-void QWindow::clear()
+void Conversation::clear()
 {
     int count = tabBar->count();
     for(int i=0; i<count; i++)
@@ -65,12 +65,12 @@ void QWindow::clear()
     tabs = 0;
 }
 
-int QWindow::count()
+int Conversation::count()
 {
     return tabs;
 }
 
-void QWindow::closeTab(int tab)
+void Conversation::closeTab(int tab)
 {
     int index = tabBar->tabData(tab).toInt();
     conversations->removeWidget(conversations->widget(index));
@@ -86,37 +86,37 @@ void QWindow::closeTab(int tab)
     emit tabCloseRequested(tab);
 }
 
-void QWindow::clearColor(int tab)
+void Conversation::clearColor(int tab)
 {
     tabBar->setTabTextColor(tab, Qt::black);
     conversations->setCurrentIndex(tabBar->tabData(tab).toInt());
 }
 
-void QWindow::moveTab(int from, int to)
+void Conversation::moveTab(int from, int to)
 {
     emit tabMoved(from, to);
 }
 
-void QWindow::previousTab()
+void Conversation::previousTab()
 {
     int count = tabBar->count();
     if(count > 1)
         tabBar->setCurrentIndex((tabBar->currentIndex()+1)%count);
 }
 
-void QWindow::nextTab()
+void Conversation::nextTab()
 {
     int count = tabBar->count();
     if(count > 1)
         tabBar->setCurrentIndex((tabBar->currentIndex()+count-1)%count);
 }
 
-void QWindow::setSettings(QSettings *tmpSettings)
+void Conversation::setSettings(QSettings *tmpSettings)
 {
     settings = tmpSettings;
 }
 
-void QWindow::update()
+void Conversation::update()
 {
     if(tabs == 0)
         close();
@@ -126,7 +126,7 @@ void QWindow::update()
         tabBar->setVisible(true);
 }
 
-void QWindow::closeEvent(QCloseEvent *event)
+void Conversation::closeEvent(QCloseEvent *event)
 {
     clear();
     settings->setValue("dimensions", this->geometry());

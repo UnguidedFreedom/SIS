@@ -16,28 +16,22 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef QMESSAGEEDIT_H
-#define QMESSAGEEDIT_H
+#ifndef QMESSAGESBROWSER_H
+#define QMESSAGESBROWSER_H
 
-#include <QTextEdit>
+#include <QTextBrowser>
 #include <QKeyEvent>
 
-class QMessageEdit : public QTextEdit
+class MessagesBrowser : public QTextBrowser
 {
     Q_OBJECT
 public:
-    explicit QMessageEdit(QWidget *parent = 0);
-
-protected:
-    virtual void keyPressEvent(QKeyEvent *e);
-
-public slots:
-    void acceptKey(QKeyEvent *e);
-
+    explicit MessagesBrowser(QWidget *parent = 0);
+    
 signals:
-    void returnPressed();
-    void nextTab();
-    void previousTab();
+    void giveFocus(QKeyEvent*);
+protected:
+    virtual void keyPressEvent(QKeyEvent *ev);
 };
 
-#endif // QMESSAGEEDIT_H
+#endif // QMESSAGESBROWSER_H

@@ -16,14 +16,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "qmessagesbrowser.h"
+#include "messagesbrowser.h"
 
-QMessagesBrowser::QMessagesBrowser(QWidget *parent) :
+MessagesBrowser::MessagesBrowser(QWidget *parent) :
     QTextBrowser(parent)
 {
 }
 
-void QMessagesBrowser::keyPressEvent(QKeyEvent *ev)
+void MessagesBrowser::keyPressEvent(QKeyEvent *ev)
 {
     if(ev->modifiers() == Qt::NoModifier || ev->modifiers() == Qt::ShiftModifier)
         emit giveFocus(ev);

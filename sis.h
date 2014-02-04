@@ -34,16 +34,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <map>
 #include "contact.h"
-#include "qmessageedit.h"
-#include "qmessagesbrowser.h"
-#include "qwindow.h"
+#include "messageedit.h"
+#include "messagesbrowser.h"
+#include "conversation.h"
 
 using namespace std;
 
 struct datas {
     int tabId;
     QWidget* container;
-    QMessagesBrowser* browser;
+    MessagesBrowser* browser;
     unsigned char* key;
     Contact contact;
     quint16 messageSize;
@@ -62,10 +62,10 @@ public:
   SIS(QWidget *parent = 0);
 
 private:
-  QMessagesBrowser* state;
+  MessagesBrowser* state;
   QPushButton* button;
 
-  QWindow* window;
+  Conversation* window;
 
   QSettings* settings;
   QString nickname;
@@ -75,11 +75,11 @@ private:
   QTcpServer* server;
   int port;
 
-  map<QMessageEdit*, QTcpSocket*> edit_socket;
-  map<QTcpSocket*, QMessageEdit*> socket_edit;
+  map<MessageEdit*, QTcpSocket*> edit_socket;
+  map<QTcpSocket*, MessageEdit*> socket_edit;
 
   map<QTcpSocket*, datas> networkMap;
-  map<int, pair<QMessageEdit*, QTcpSocket*> > tabMap;
+  map<int, pair<MessageEdit*, QTcpSocket*> > tabMap;
 
   int seed_prng(int);
   void openTab(QTcpSocket* socket);

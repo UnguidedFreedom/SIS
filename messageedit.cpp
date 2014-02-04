@@ -16,15 +16,15 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "qmessageedit.h"
+#include "messageedit.h"
 
-QMessageEdit::QMessageEdit(QWidget *parent) :
+MessageEdit::MessageEdit(QWidget *parent) :
     QTextEdit(parent)
 {
     setAcceptRichText(false);
 }
 
-void QMessageEdit::keyPressEvent(QKeyEvent *e)
+void MessageEdit::keyPressEvent(QKeyEvent *e)
 {
     if(e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter)
     {
@@ -48,7 +48,7 @@ void QMessageEdit::keyPressEvent(QKeyEvent *e)
     QTextEdit::keyPressEvent(e);
 }
 
-void QMessageEdit::acceptKey(QKeyEvent *e)
+void MessageEdit::acceptKey(QKeyEvent *e)
 {
     keyPressEvent(e);
 }

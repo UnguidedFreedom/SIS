@@ -29,7 +29,7 @@ SIS::SIS(QWidget *parent)
 
     settings = new QSettings(QSettings::UserScope, qApp->organizationName(), qApp->applicationName());
 
-    state = new QMessagesBrowser;
+    state = new MessagesBrowser;
 
     button = new QPushButton(tr("Connect to host"));
     connect(button, SIGNAL(pressed()), this, SLOT(requestNewConnection()));
@@ -43,7 +43,7 @@ SIS::SIS(QWidget *parent)
     setCentralWidget(container);
     setWindowTitle(tr("SIS Messaging"));
 
-    window = new QWindow(this);
+    window = new Conversation(this);
     window->setSettings(settings);
 
     connect(window, SIGNAL(tabMoved(int,int)), this, SLOT(moveTab(int,int)));
@@ -190,7 +190,7 @@ SIS::SIS(QWidget *parent)
 
 void SIS::transfer()
 {
-    QMessageEdit *edit = qobject_cast<QMessageEdit*>(sender());
+    MessageEdit *edit = qobject_cast<MessageEdit*>(sender());
     if(edit == 0)
         return;
 
@@ -199,7 +199,7 @@ void SIS::transfer()
 
     QTcpSocket* socket = edit_socket[edit];
     datas conversation = networkMap[socket];
-    QMessagesBrowser* browser = conversation.browser;
+    MessagesBrowser* browser = conversation.browser;
 
     //Encoding
     QString currText = edit->toPlainText().replace("\n", "<br />");
@@ -292,7 +292,7 @@ void SIS::dataReceived()
     if(type == text)
     {
         int tabId = conversation.tabId;
-        QMessagesBrowser* browser = conversation.browser;
+        MessagesBrowser* browser = conversation.browser;
 
         if(tabId == -1)
         {
@@ -707,12 +707,12 @@ void SIS::closeTab(int tab)
 
     tabMap.erase(tab);
 
-    for(map<int, pair<QMessageEdit*, QTcpSocket*> >::iterator it = tabMap.begin(); it!= tabMap.end(); it++)
+    for(map<int, pair<MessageEdit*, QTcpSocket*> >::iterator it = tabMap.begin(); it!= tabMap.end(); it++)
     {
         if(it->first > tab)
         {
             int currTabId = it->first;
-            pair<QMessageEdit*, QTcpSocket*> current = it->second;
+            pair<MessageEdit*, QTcpSocket*> current = it->second;
             tabMap.erase(currTabId);
             tabMap[currTabId-1] = current;
         }
@@ -722,9 +722,9 @@ void SIS::closeTab(int tab)
 
 void SIS::openTab(QTcpSocket *socket)
 {
-    QMessagesBrowser* browser = new QMessagesBrowser;
+    MessagesBrowser* browser = new MessagesBrowser;
     browser->setOpenExternalLinks(true);
-    QMessageEdit* edit = new QMessageEdit;
+    MessageEdit* edit = new MessageEdit;
     edit->setFocusPolicy(Qt::StrongFocus);
     connect(edit, SIGNAL(returnPressed()), this, SLOT(transfer()));
     connect(edit, SIGNAL(nextTab()), window, SLOT(nextTab()));
@@ -762,7 +762,7 @@ void SIS::openTab(QTcpSocket *socket)
     current.messageSize = 0;
 
     networkMap[socket] = current;
-    tabMap[tabId] = pair<QMessageEdit*, QTcpSocket*>(edit, socket);
+    tabMap[tabId] = pair<MessageEdit*, QTcpSocket*>(edit, socket);
 
     edit->setFocus();
     window->update();
@@ -781,7 +781,7 @@ void SIS::reOpenTab(QTcpSocket *socket)
     datas data = networkMap[socket];
     int tabId = window->addTab(data.container, "Socket " + QString::number(socket->socketDescriptor()));
     networkMap[socket].tabId = tabId;
-    tabMap[tabId] = pair<QMessageEdit*, QTcpSocket*>(socket_edit[socket], socket);
+    tabMap[tabId] = pair<MessageEdit*, QTcpSocket*>(socket_edit[socket], socket);
     window->update();
 }
 
@@ -797,7 +797,7 @@ void SIS::moveTab(int from, int to)
     networkMap[tabMap[from].second].tabId = to;
     networkMap[tabMap[to].second].tabId = from;
 
-    pair<QMessageEdit*, QTcpSocket*> dataFrom = tabMap[from];
+    pair<MessageEdit*, QTcpSocket*> dataFrom = tabMap[from];
 
     tabMap[from] = tabMap[to];
     tabMap[to] = dataFrom;

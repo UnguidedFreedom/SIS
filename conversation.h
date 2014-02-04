@@ -1,13 +1,13 @@
-#ifndef QWINDOW_H
-#define QWINDOW_H
+#ifndef CONVERSATION_H
+#define CONVERSATION_H
 
 #include <QtGui>
 
-class QWindow : public QMainWindow
+class Conversation : public QMainWindow
 {
     Q_OBJECT
 public:
-    explicit QWindow(QWidget *parent = 0);
+    explicit Conversation(QWidget *parent = 0);
     int currentIndex();
     void setTabTextColor(int, QColor);
     int addTab(QWidget*, QString);
@@ -37,4 +37,4 @@ private:
 };
 
 #include "sis.h"
-#endif // QWINDOW_H
+#endif // CONVERSATION_H

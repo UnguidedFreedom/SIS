@@ -15,13 +15,13 @@ TEMPLATE = app
 
 SOURCES += main.cpp\
         sis.cpp \
-    qmessageedit.cpp \
-    qmessagesbrowser.cpp \
-    qwindow.cpp \
+    messageedit.cpp \
+    messagesbrowser.cpp \
+    conversation.cpp \
     contact.cpp
 
 HEADERS  += sis.h \
-    qmessageedit.h \
-    qmessagesbrowser.h \
-    qwindow.h \
+    messageedit.h \
+    messagesbrowser.h \
+    conversation.h \
     contact.h
