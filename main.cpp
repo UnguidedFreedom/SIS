@@ -25,9 +25,9 @@ int main(int argc, char *argv[])
 {
   QApplication a(argc, argv);
 
-  qRegisterMetaType<Friend>("Friend");
+  qRegisterMetaType<Contact>("Contact");
 
-  QCoreApplication::setOrganizationName("CamelCorp");
+  QCoreApplication::setOrganizationName("Unguided Freedom");
   QCoreApplication::setApplicationName("SIS");
 
 

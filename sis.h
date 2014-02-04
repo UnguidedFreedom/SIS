@@ -33,7 +33,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <openssl/bio.h>
 
 #include <map>
-#include "friend.h"
+#include "contact.h"
 #include "qmessageedit.h"
 #include "qmessagesbrowser.h"
 #include "qwindow.h"
@@ -45,7 +45,7 @@ struct datas {
     QWidget* container;
     QMessagesBrowser* browser;
     unsigned char* key;
-    Friend contact;
+    Contact contact;
     quint16 messageSize;
 };
 

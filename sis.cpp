@@ -357,10 +357,10 @@ void SIS::dataReceived()
         fputs(tmp.toStdString().c_str(), pFile);
         rewind(pFile);
 
-        RSA* friendKey = RSA_new();
-        PEM_read_RSAPublicKey(pFile, &friendKey, NULL, NULL);
+        RSA* contactKey = RSA_new();
+        PEM_read_RSAPublicKey(pFile, &contactKey, NULL, NULL);
 
-        Friend contact(friendKey);
+        Contact contact(contactKey);
         conversation.contact = contact;
         fclose(pFile);
 
@@ -401,10 +401,10 @@ void SIS::dataReceived()
         fputs(tmp.toStdString().c_str(), pFile);
         rewind(pFile);
 
-        RSA* friendKey = RSA_new();
-        PEM_read_RSAPublicKey(pFile, &friendKey, NULL, NULL);
+        RSA* contactKey = RSA_new();
+        PEM_read_RSAPublicKey(pFile, &contactKey, NULL, NULL);
 
-        Friend contact(friendKey);
+        Contact contact(contactKey);
         conversation.contact = contact;
 
         //Generating a symmetric key

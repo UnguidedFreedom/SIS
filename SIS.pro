@@ -18,10 +18,10 @@ SOURCES += main.cpp\
     qmessageedit.cpp \
     qmessagesbrowser.cpp \
     qwindow.cpp \
-    friend.cpp
+    contact.cpp
 
 HEADERS  += sis.h \
     qmessageedit.h \
     qmessagesbrowser.h \
     qwindow.h \
-    friend.h
+    contact.h
