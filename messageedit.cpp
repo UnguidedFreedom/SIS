@@ -1,6 +1,6 @@
 /*
 SIS - SIS Is Secure - safe instant messaging based on a non-central server architecture
-Copyright (C) 2013 Benoît Vernier <vernier.benoit@gmail.com>
+Copyright (C) 2013-2014 Benoît Vernier <vernier.benoit@gmail.com>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
